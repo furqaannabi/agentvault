@@ -5,7 +5,7 @@ import { ChatInput } from '@/components/chat/ChatInput'
 
 export default function HomePage() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Message list */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 'var(--space-6) 0' }}>
         <MessageBubble

@@ -310,6 +310,46 @@ function SidebarInner({ onNewChat, onSelectSession }: SidebarInnerProps) {
   )
 }
 
+// ── TopBar ─────────────────────────────────────────────────────────────────────
+
+const PAGE_TITLES: Record<string, string> = {
+  '/':       'DECISION LOG',
+  '/swarm':  'SPECIALIST SWARM',
+  '/policy': 'POLICY ENGINE',
+  '/proof':  'PROOF EXPLORER',
+}
+
+function TopBar() {
+  const pathname = usePathname()
+  const base     = '/' + pathname.split('/')[1]
+  const title    = PAGE_TITLES[base] ?? 'AGENTVAULT'
+
+  return (
+    <header
+      style={{
+        height:          'var(--topbar-height)',
+        display:         'flex',
+        alignItems:      'center',
+        justifyContent:  'space-between',
+        padding:         '0 var(--space-6)',
+        borderBottom:    'var(--border-width) solid var(--color-border)',
+        backgroundColor: 'var(--color-bg-surface)',
+        flexShrink:      0,
+      }}
+    >
+      {/* Page title */}
+      <Label color="primary" style={{ fontSize: 'var(--text-xs)' }}>
+        {title}
+      </Label>
+
+      {/* Right actions slot — version tag */}
+      <Mono size="xs" color="muted" as="span">
+        ProofTwin · V.2.4.0
+      </Mono>
+    </header>
+  )
+}
+
 // ── AppShell ───────────────────────────────────────────────────────────────────
 
 interface AppShellProps {
@@ -346,8 +386,17 @@ export function AppShell({
         />
 
         {/* Main */}
-        <main style={{ flex: 1, minWidth: 0, overflowY: 'auto', height: '100vh' }}>
-          {children}
+        <main style={{
+          flex:          1,
+          minWidth:      0,
+          height:        '100vh',
+          display:       'flex',
+          flexDirection: 'column',
+        }}>
+          <TopBar />
+          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+            {children}
+          </div>
         </main>
 
         {/* Drawer */}
