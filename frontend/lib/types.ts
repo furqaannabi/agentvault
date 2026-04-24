@@ -1,83 +1,87 @@
-export type MessageRole = 'user' | 'twin'
-
-export interface ChatMessage {
-  id: string
-  role: MessageRole
-  content: string
-  timestamp: number
-  isStreaming?: boolean
-}
+// ── Shared interfaces — locked Day 1 with BE team ────────────────
+// Edit only after pinging BE1/BE2. No silent changes.
 
 export interface TradeProposal {
-  fromToken: string
-  toToken: string
-  fromAmount: string
-  toAmount: string
-  priceImpact: number
-  route: string[]
-  rationale: string
+  id:             string
+  action:         'swap'
+  tokenIn:        string
+  tokenOut:       string
+  amountIn:       string
+  maxSlippageBps: number
+  reasoning:      string
+  createdAt:      number
 }
 
-export interface ApprovalPrompt {
-  id: string
-  trade: TradeProposal
-  status: 'pending' | 'approved' | 'rejected'
-}
-
-export type PolicyStatus = 'pass' | 'fail' | 'pending'
-
-export interface PolicyCheck {
-  id: string
-  rule: string
-  description: string
-  status: PolicyStatus
-  attestation?: string
-  hash?: string
+export interface PolicyRule {
+  name:    string
+  ok:      boolean
+  detail?: string
 }
 
 export interface PolicyVerdict {
-  id: string
-  tradeId: string
-  checks: PolicyCheck[]
-  overallStatus: PolicyStatus
-  signedAt: number
-  signer: string
-  hash: string
+  proposalId:       string
+  ok:               boolean
+  rules:            PolicyRule[]
+  teemlAttestation: string
+  sig:              string
 }
 
-export type ProofStepStatus = 'verified' | 'pending' | 'failed'
-
-export interface ProofStep {
-  index: number
-  label: string
-  hash: string
-  signer?: string
-  status: ProofStepStatus
-  verifierUrl?: string
-  expandedContent?: string
+export interface ExecResult {
+  proposalId:  string
+  txHash:      string
+  blockNumber: number
+  amountOut:   string
+  gasUsed:     string
+  status:      'success' | 'failed' | 'reverted'
+  error?:      string
 }
 
-export interface ProofObject {
-  id: string
-  tradeId: string
-  trade: TradeProposal
-  steps: ProofStep[]
-  policyVerdict: PolicyVerdict
-  txHash: string
-  anchorHash: string
-  createdAt: number
-  status: 'verified' | 'pending' | 'failed'
+export interface Proof {
+  proposalId: string
+  proposal:   TradeProposal
+  verdict:    PolicyVerdict
+  exec:       ExecResult
+  rootHash:   string
+  anchorTx:   string
+  logCid:     string
 }
 
-export interface StreamChunk {
-  type: 'text' | 'approval_prompt' | 'proof_ready'
-  payload: string | ApprovalPrompt | { proofId: string }
+// ── FE-only types ─────────────────────────────────────────────────
+
+export type MessageRole = 'user' | 'twin'
+
+export interface ChatMessage {
+  id:          string
+  role:        MessageRole
+  content:     string
+  timestamp:   number
+  isStreaming?: boolean
 }
 
 export interface ConversationSession {
-  id: string
-  title: string
-  createdAt: number
+  id:            string
+  title:         string
+  createdAt:     number
   lastMessageAt: number
-  messageCount: number
+  messageCount:  number
+}
+
+// SSE chunks from POST /chat
+export type StreamChunk =
+  | { type: 'text';        payload: string }
+  | { type: 'proposal';    payload: TradeProposal }
+  | { type: 'proof_ready'; payload: { proofId: string } }
+  | { type: 'error';       payload: string }
+
+// UI projection of Proof → ordered display steps for ProofExplorer
+export type ProofStepStatus = 'verified' | 'pending' | 'failed'
+
+export interface ProofStep {
+  index:       number
+  label:       string
+  hash:        string
+  signer?:     string
+  status:      ProofStepStatus
+  verifierUrl?: string
+  detail?:     string
 }
