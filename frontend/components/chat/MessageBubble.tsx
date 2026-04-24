@@ -81,7 +81,7 @@ export function MessageBubble({
           }}
         >
           <Label
-            color={isUser ? 'muted' : 'teal'}
+            color="muted"
             style={{ fontSize: 'var(--text-xs)' }}
           >
             {isUser ? 'YOU' : 'PROOFTWIN'}
@@ -102,7 +102,7 @@ export function MessageBubble({
             border:      `var(--border-width) solid var(--color-border)`,
             borderLeft:  isUser
               ? 'var(--border-width) solid var(--color-border)'
-              : 'var(--border-width-thick) solid var(--color-accent-teal)',
+              : 'var(--border-width-thick) solid var(--color-border-strong)',
             padding:     'var(--space-3) var(--space-4)',
           }}
         >
