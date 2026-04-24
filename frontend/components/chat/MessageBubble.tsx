@@ -34,7 +34,7 @@ function StreamCursor() {
         display:    'inline-block',
         fontFamily: 'var(--font-mono)',
         fontSize:   'var(--text-base)',
-        color:      'var(--color-accent-teal)',
+        color:      'var(--color-text-primary)',
         marginLeft: 2,
         lineHeight: 1,
       }}
