@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Syne, DM_Sans, JetBrains_Mono } from 'next/font/google'
+import { AppShell } from '@/components/layout/AppShell'
 import './globals.css'
 
 const syne = Syne({
@@ -38,7 +39,9 @@ export default function RootLayout({
       lang="en"
       className={`${syne.variable} ${dmSans.variable} ${jetbrainsMono.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        <AppShell>{children}</AppShell>
+      </body>
     </html>
   )
 }
