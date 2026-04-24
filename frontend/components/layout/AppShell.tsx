@@ -176,9 +176,9 @@ function SidebarInner({ onNewChat, onSelectSession }: SidebarInnerProps) {
                     ? '#ffffff'
                     : 'var(--color-text-primary)',
                 textDecoration: 'none',
-                backgroundColor: isActive ? 'var(--color-bg-overlay)' : 'transparent',
+                backgroundColor: isActive ? 'var(--color-bg-elevated)' : 'transparent',
                 borderLeft:     isActive
-                  ? '2px solid var(--color-text-primary)'
+                  ? '2px solid #ffffff'
                   : '2px solid transparent',
                 transition:     `background-color var(--duration-fast) var(--ease-out),
                                  color var(--duration-fast) var(--ease-out)`,
