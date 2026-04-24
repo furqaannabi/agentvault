@@ -81,7 +81,7 @@ export function MessageBubble({
           }}
         >
           <Label
-            color="muted"
+            color="primary"
             style={{ fontSize: 'var(--text-xs)' }}
           >
             {isUser ? 'YOU' : 'PROOFTWIN'}

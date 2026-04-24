@@ -173,8 +173,8 @@ function SidebarInner({ onNewChat, onSelectSession }: SidebarInnerProps) {
                 color:          isPhase2
                   ? 'var(--color-text-muted)'
                   : isActive
-                    ? 'var(--color-text-primary)'
-                    : 'var(--color-text-secondary)',
+                    ? '#ffffff'
+                    : 'var(--color-text-primary)',
                 textDecoration: 'none',
                 backgroundColor: isActive ? 'var(--color-bg-overlay)' : 'transparent',
                 borderLeft:     isActive
