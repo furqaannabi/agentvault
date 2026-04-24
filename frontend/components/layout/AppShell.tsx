@@ -187,8 +187,11 @@ function SidebarInner({ onNewChat, onSelectSession }: SidebarInnerProps) {
                 opacity:        isPhase2 ? 0.35 : 1,
               }}
             >
-              <span style={{ flexShrink: 0 }}>{item.icon}</span>
-              <Label style={{ fontSize: 'var(--text-xs)' }}>
+              <span style={{ flexShrink: 0, color: 'inherit' }}>{item.icon}</span>
+              <Label
+                color={isPhase2 ? 'muted' : isActive ? 'primary' : 'secondary'}
+                style={{ fontSize: 'var(--text-xs)' }}
+              >
                 {item.label}
               </Label>
             </Link>

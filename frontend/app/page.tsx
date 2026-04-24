@@ -4,6 +4,7 @@ import { Heading, Body, Label, Mono } from '@/components/design-system/Typograph
 import { Badge } from '@/components/design-system/Badge'
 import { HashDisplay } from '@/components/design-system/HashDisplay'
 import { MessageBubble } from '@/components/chat/MessageBubble'
+import { ChatInput } from '@/components/chat/ChatInput'
 
 export default function HomePage() {
   return (
@@ -35,6 +36,7 @@ export default function HomePage() {
       <div style={{ width: '100%', maxWidth: 640, border: '1px solid var(--color-border)' }}>
         <MessageBubble role="user" content="Rebalance my portfolio — move 10% into ETH." timestamp={Date.now() - 60000} />
         <MessageBubble role="twin" content="Analysing current allocation. ETH is underweighted at 4.2% vs target 14%. I'll propose a swap of 500 USDC → ETH at current market price." timestamp={Date.now() - 30000} isStreaming />
+        <ChatInput onSend={() => {}} />
       </div>
       <Mono size="xs" color="muted" as="samp">V.2.4.0-ACTIVE</Mono>
     </main>
