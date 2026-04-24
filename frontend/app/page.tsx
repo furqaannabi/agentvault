@@ -1,5 +1,6 @@
 import { Heading, Body, Label, Mono } from '@/components/design-system/Typography'
 import { Badge } from '@/components/design-system/Badge'
+import { HashDisplay } from '@/components/design-system/HashDisplay'
 
 export default function HomePage() {
   return (
@@ -28,6 +29,7 @@ export default function HomePage() {
         <Badge variant="active" dot />
         <Badge variant="syncing" />
       </div>
+      <HashDisplay hash="0xebd94a82745f9c1b3f6e8d2a1c4b7f9e3d6a8c2b5e1f4a7c9d2b5e8a1c4f7d9" />
       <Mono size="xs" color="muted" as="samp">V.2.4.0-ACTIVE</Mono>
     </main>
   )
