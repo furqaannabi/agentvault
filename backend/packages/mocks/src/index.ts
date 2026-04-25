@@ -12,8 +12,10 @@ const ZERO_SIG: Hex =
 const ZERO_ADDR: Hex = '0x0000000000000000000000000000000000000000';
 const ZERO_HASH: Hex = '0x0000000000000000000000000000000000000000000000000000000000000000';
 
+// Ethereum Sepolia (chainId 11155111) — Circle's official USDC + canonical WETH
 export const USDC_SEPOLIA: Hex = '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238';
 export const WETH_SEPOLIA: Hex = '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14';
+export const SEPOLIA_CHAIN_ID = 11155111;
 
 export const mockInference = (overrides: Partial<VerifiableInference> = {}): VerifiableInference => ({
   providerUrl: 'https://mock.0g-compute.local/v1/proxy',

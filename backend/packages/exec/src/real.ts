@@ -1,36 +1,174 @@
-import type { ExecAdapter, ExecResult, ExecSwapInput } from '@agentvault/types';
+import type { ExecAdapter, ExecResult, ExecSwapInput, Hex } from '@agentvault/types';
+import { createUniswapApiClient } from '@agentvault/uniswap-api';
+import { ethers } from 'ethers';
 import type { ExecConfig } from './index.js';
 
 /**
- * BE2 OWNS THIS FILE.
+ * Real execution adapter using the Uniswap Trade API on an EVM testnet.
+ * Default chain: Sepolia (11155111). Override via EXEC_CHAIN_ID.
  *
- * Implement Uniswap v3 quote + swap on Sepolia. Must:
- *  - Honor proposal.maxSlippageBps when building swapParams
- *  - Wait for receipt and parse Swap log → amountOut
- *  - Return ExecResult with status='success' on confirmation
- *  - Return ExecResult with status='reverted' | 'failed' + error msg on any error (NEVER throw)
- *  - Be idempotent on proposal.id (cache last result by proposalId)
- *
- * Sub-modules suggested:
- *   packages/wallet     — viem signer, gas, nonce, tx wait
- *   packages/uniswap-api — Uniswap Trade API approval, quote, swap calls
- *
- * Imported by apps/api when EXEC_MODE=real.
+ * Pipeline per swap:
+ *   1. /check_approval → if approval tx returned, send it and wait
+ *   2. /quote (via quoteProposal helper)
+ *   3. If permitData present, sign EIP-712 typed data with our wallet
+ *   4. /swap → returns transaction calldata
+ *   5. wallet.sendTransaction → wait receipt
+ *   6. Parse ERC20 Transfer logs (tokenOut → wallet) to compute amountOut
+ *   7. Cache by proposal.id for idempotency
  */
+const ZERO_HASH: Hex = '0x0000000000000000000000000000000000000000000000000000000000000000';
+const ERC20_TRANSFER_TOPIC = ethers.id('Transfer(address,address,uint256)');
+
+interface ApprovalResponse {
+  approval?: { to: Hex; data: Hex; value?: string } | null;
+}
+
+interface QuoteResponse {
+  quote: unknown;
+  permitData?: {
+    domain: ethers.TypedDataDomain;
+    types: Record<string, ethers.TypedDataField[]>;
+    values: Record<string, unknown>;
+  } | null;
+  output?: { amount?: string };
+}
+
+interface SwapResponse {
+  transaction: {
+    to: Hex;
+    data: Hex;
+    value?: string;
+    from?: Hex;
+    chainId?: number;
+    gasLimit?: string;
+  };
+  requestId?: string;
+}
+
 export function realAdapter(config: ExecConfig): ExecAdapter {
+  const apiKey = process.env.UNISWAP_API_KEY ?? '';
+  const chainId = Number(process.env.EXEC_CHAIN_ID ?? 11155111);
+
+  if (!config.sepoliaPrivateKey) {
+    throw new Error('SEPOLIA_PRIVATE_KEY required when EXEC_MODE=real');
+  }
+  if (!config.sepoliaRpcUrl) {
+    throw new Error('SEPOLIA_RPC_URL required when EXEC_MODE=real');
+  }
+  if (!apiKey) {
+    throw new Error('UNISWAP_API_KEY required when EXEC_MODE=real');
+  }
+
+  const provider = new ethers.JsonRpcProvider(config.sepoliaRpcUrl);
+  const wallet = new ethers.Wallet(config.sepoliaPrivateKey, provider);
+  const uniswap = createUniswapApiClient({ apiKey });
+  const cache = new Map<string, ExecResult>();
+
   return {
-    async swap({ proposal }: ExecSwapInput): Promise<ExecResult> {
-      void config;
-      return {
-        proposalId: proposal.id,
-        txHash: '0x0000000000000000000000000000000000000000000000000000000000000000',
-        blockNumber: 0,
-        amountOut: '0',
-        gasUsed: '0',
-        status: 'failed',
-        error: 'real adapter not implemented yet (BE2 scope)',
-        chainId: 11155111,
+    async swap({ proposal, verdict }: ExecSwapInput): Promise<ExecResult> {
+      const cached = cache.get(proposal.id);
+      if (cached) return cached;
+
+      const fail = (status: 'failed' | 'reverted', error: string): ExecResult => {
+        const r: ExecResult = {
+          proposalId: proposal.id,
+          txHash: ZERO_HASH,
+          blockNumber: 0,
+          amountOut: '0',
+          gasUsed: '0',
+          status,
+          error,
+          chainId,
+        };
+        cache.set(proposal.id, r);
+        return r;
       };
+
+      if (!verdict.ok) return fail('failed', 'verdict.ok=false');
+
+      try {
+        const swapper = wallet.address as Hex;
+
+        // 1. Check approval — Uniswap returns an approval tx if Permit2 isn't approved on tokenIn
+        const approvalRes = await uniswap.checkApproval<ApprovalResponse>({
+          walletAddress: swapper,
+          token: proposal.tokenIn,
+          amount: proposal.amountIn,
+          chainId,
+        });
+        if (approvalRes.approval) {
+          const approvalTx = await wallet.sendTransaction({
+            to: approvalRes.approval.to,
+            data: approvalRes.approval.data,
+            value: approvalRes.approval.value ? BigInt(approvalRes.approval.value) : 0n,
+          });
+          const ar = await approvalTx.wait();
+          if (!ar || ar.status !== 1) return fail('failed', 'approval tx failed');
+        }
+
+        // 2. Quote
+        const quoteRes = await uniswap.quoteProposal<QuoteResponse>(proposal, chainId, swapper);
+
+        // 3. Optional Permit2 EIP-712 signature
+        let signature: Hex | undefined;
+        if (quoteRes.permitData) {
+          const { domain, types, values } = quoteRes.permitData;
+          // ethers.signTypedData rejects EIP712Domain in types
+          const filtered = { ...types } as Record<string, ethers.TypedDataField[]> & {
+            EIP712Domain?: ethers.TypedDataField[];
+          };
+          delete filtered.EIP712Domain;
+          signature = (await wallet.signTypedData(domain, filtered, values)) as Hex;
+        }
+
+        // 4. Swap calldata
+        const swapRes = await uniswap.swap<SwapResponse>({
+          quote: quoteRes.quote,
+          signature,
+        });
+
+        // 5. Send tx
+        const tx = await wallet.sendTransaction({
+          to: swapRes.transaction.to,
+          data: swapRes.transaction.data,
+          value: swapRes.transaction.value ? BigInt(swapRes.transaction.value) : 0n,
+          gasLimit: swapRes.transaction.gasLimit ? BigInt(swapRes.transaction.gasLimit) : undefined,
+        });
+        const receipt = await tx.wait();
+        if (!receipt) return fail('failed', 'no receipt');
+        if (receipt.status !== 1) {
+          return fail('reverted', `tx reverted at block ${receipt.blockNumber}`);
+        }
+
+        // 6. Parse amountOut from ERC20 Transfer logs (tokenOut → swapper)
+        const tokenOutLc = proposal.tokenOut.toLowerCase();
+        const swapperPadded =
+          `0x${'0'.repeat(24)}${swapper.slice(2).toLowerCase()}`.toLowerCase();
+        let amountOut = 0n;
+        for (const log of receipt.logs) {
+          if (log.address.toLowerCase() !== tokenOutLc) continue;
+          if (log.topics[0]?.toLowerCase() !== ERC20_TRANSFER_TOPIC.toLowerCase()) continue;
+          if (log.topics[2]?.toLowerCase() !== swapperPadded) continue;
+          amountOut += BigInt(log.data);
+        }
+        if (amountOut === 0n && quoteRes.output?.amount) {
+          amountOut = BigInt(quoteRes.output.amount);
+        }
+
+        const result: ExecResult = {
+          proposalId: proposal.id,
+          txHash: receipt.hash as Hex,
+          blockNumber: Number(receipt.blockNumber),
+          amountOut: amountOut.toString(),
+          gasUsed: receipt.gasUsed.toString(),
+          status: 'success',
+          chainId,
+        };
+        cache.set(proposal.id, result);
+        return result;
+      } catch (e) {
+        return fail('failed', (e as Error).message);
+      }
     },
   };
 }

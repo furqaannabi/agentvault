@@ -15,7 +15,9 @@
   },
   "dependencies": {
     "@agentvault/mocks": "workspace:*",
-    "@agentvault/types": "workspace:*"
+    "@agentvault/types": "workspace:*",
+    "@agentvault/uniswap-api": "workspace:*",
+    "ethers": "6.13.1"
   },
   "devDependencies": {
     "typescript": "^5.5.0"
