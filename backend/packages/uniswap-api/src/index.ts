@@ -90,7 +90,12 @@ export function createUniswapApiClient(config: UniswapApiConfig): UniswapApiClie
     });
 
     if (!response.ok) {
-      throw new Error(`Uniswap API request failed: ${response.status} ${response.statusText}`);
+      const text = await response.text().catch(() => '');
+      console.error(`[uniswap] ${path} failed ${response.status}: ${text}`);
+      console.error(`[uniswap] ${path} sent body:`, JSON.stringify(body));
+      throw new Error(
+        `Uniswap API ${path} ${response.status}: ${text || response.statusText}`,
+      );
     }
 
     return (await response.json()) as UniswapApiResponse<TResponse>;

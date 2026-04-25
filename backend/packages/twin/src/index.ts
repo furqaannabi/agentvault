@@ -99,6 +99,7 @@ export function createTwin(deps: TwinDeps): Twin {
       )}`;
       const output = await compute.infer(SANITY_PROMPT, userPrompt);
       const result = parseSanity(output);
+      console.log(`[twin] sanity: ok=${result.ok} reason="${result.reason}"`);
       const inference = await attestInference(signer, {
         providerUrl: cfg.computeBaseUrl,
         modelId: cfg.computeModel,

@@ -5,7 +5,7 @@ import type { ExecConfig } from './index.js';
 
 /**
  * Real execution adapter using the Uniswap Trade API on an EVM testnet.
- * Default chain: Base Sepolia (84532). Override via EXEC_CHAIN_ID.
+ * Default chain: Ethereum Sepolia (11155111). Override via EXEC_CHAIN_ID.
  *
  * Pipeline per swap:
  *   1. /check_approval → if approval tx returned, send it and wait
@@ -47,7 +47,7 @@ interface SwapResponse {
 
 export function realAdapter(config: ExecConfig): ExecAdapter {
   const apiKey = process.env.UNISWAP_API_KEY ?? '';
-  const chainId = Number(process.env.EXEC_CHAIN_ID ?? 84532);
+  const chainId = Number(process.env.EXEC_CHAIN_ID ?? 11155111);
 
   if (!config.sepoliaPrivateKey) {
     throw new Error('SEPOLIA_PRIVATE_KEY required when EXEC_MODE=real');
@@ -121,18 +121,29 @@ export function realAdapter(config: ExecConfig): ExecAdapter {
           signature = (await wallet.signTypedData(domain, filtered, values)) as Hex;
         }
 
-        // 4. Swap calldata
-        const swapRes = await uniswap.swap<SwapResponse>({
+        // 4. Swap calldata — Uniswap requires permitData alongside signature
+        const swapRes = (await uniswap.swap({
           quote: quoteRes.quote,
           signature,
-        });
+          permitData: quoteRes.permitData ?? undefined,
+        })) as Record<string, unknown>;
+        console.log('[exec] swap response keys:', Object.keys(swapRes));
+        console.log('[exec] swap response sample:', JSON.stringify(swapRes).slice(0, 500));
+
+        // Uniswap Trade API may return tx under .transaction or .swap
+        const tx0 =
+          (swapRes.transaction as SwapResponse['transaction'] | undefined) ??
+          (swapRes.swap as SwapResponse['transaction'] | undefined);
+        if (!tx0) {
+          return fail('failed', `swap response missing transaction: ${JSON.stringify(swapRes).slice(0, 200)}`);
+        }
 
         // 5. Send tx
         const tx = await wallet.sendTransaction({
-          to: swapRes.transaction.to,
-          data: swapRes.transaction.data,
-          value: swapRes.transaction.value ? BigInt(swapRes.transaction.value) : 0n,
-          gasLimit: swapRes.transaction.gasLimit ? BigInt(swapRes.transaction.gasLimit) : undefined,
+          to: tx0.to,
+          data: tx0.data,
+          value: tx0.value ? BigInt(tx0.value) : 0n,
+          gasLimit: tx0.gasLimit ? BigInt(tx0.gasLimit) : undefined,
         });
         const receipt = await tx.wait();
         if (!receipt) return fail('failed', 'no receipt');

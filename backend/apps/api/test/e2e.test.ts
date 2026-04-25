@@ -13,8 +13,8 @@ import { fakeAnchorClient, fakeComputeClient, fakeMemory } from './fakes.js';
 const FIXED_KEY = ('0x' + 'a'.repeat(64)) as Hex;
 
 const validProposalJson = JSON.stringify({
-  tokenIn: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-  tokenOut: '0x4200000000000000000000000000000000000006',
+  tokenIn: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
+  tokenOut: '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14',
   amountIn: '500000000',
   maxSlippageBps: 50,
   reasoning: 'rebalance from stables to ETH',
@@ -72,7 +72,7 @@ describe('e2e: chat → approve → proof', () => {
     expect(chat.status).toBe(200);
     const proposal = (chat.body as { proposal: { id: string; tokenIn: string } }).proposal;
     expect(proposal.id).toMatch(/^prop_/);
-    expect(proposal.tokenIn).toBe('0x036CbD53842c5426634e7929541eC2318f3dCF7e');
+    expect(proposal.tokenIn).toBe('0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238');
 
     // 2. Approve
     const approve = await postJson(app, '/approve', { proposalId: proposal.id });
@@ -94,8 +94,8 @@ describe('e2e: chat → approve → proof', () => {
     const memory = fakeMemory();
     const compute = fakeComputeClient({
       proposal: JSON.stringify({
-        tokenIn: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-        tokenOut: '0x4200000000000000000000000000000000000006',
+        tokenIn: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
+        tokenOut: '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14',
         amountIn: '500000000',
         maxSlippageBps: 999, // over default cap of 100
         reasoning: 'aggressive',
