@@ -14,38 +14,31 @@ ProofTwin: AI portfolio manager that produces a cryptographic proof for every de
 ## Layout
 
 ```
-backend/
-├── packages/
-│   ├── types/        # shared interfaces
-│   ├── mocks/        # fixtures
-│   ├── memory/       # 0G Storage KV + Log
-│   ├── twin/         # 0G Compute + VerifiableInference
-│   ├── policy/       # rules + sanity + verdict sig
-│   ├── proof/        # merkle + anchor
-│   ├── contracts/    # Foundry, ProofAnchor.sol
-│   └── exec/         # swap interface (mock + real, BE2 owns real)
-└── apps/
-    └── api/          # Hono server
+agentvault/
+├── backend/
+│   ├── packages/
+│   │   ├── types/    # shared interfaces
+│   │   ├── mocks/    # fixtures
+│   │   ├── memory/   # 0G Storage KV + Log
+│   │   ├── twin/     # 0G Compute + VerifiableInference
+│   │   ├── policy/   # rules + sanity + verdict sig
+│   │   ├── proof/    # merkle + anchor
+│   │   └── exec/     # swap interface (mock + real, BE2 owns real)
+│   └── apps/api/     # Hono server
+└── contracts/        # Foundry, ProofAnchor.sol (top-level)
 ```
 
 ## Setup
 
+Full walkthrough: [docs/getting-started.md](./docs/getting-started.md)
+
+TL;DR:
 1. `pnpm install`
-2. Copy `.env.example` → `.env` and fill values (see [Env setup](#env-setup) below)
-3. Deploy contract: `pnpm --filter @agentvault/contracts deploy:galileo`
-4. Run dev server: `pnpm dev`
+2. Fund 0G wallet, deploy `ProofAnchor` from `../contracts/`, paste address into `.env`
+3. Run [0G Compute CLI dance](./docs/0g-compute-setup.md), paste 4 env vars
+4. `pnpm dev` → http://localhost:8787
 
-## Env setup
-
-### 0G Wallet
-- Generate key (or use existing testnet wallet)
-- Fund via faucet: https://faucet.0g.ai (0.1 0G/day)
-
-### 0G Compute (one-time CLI dance)
-Documented later in `docs/0g-compute-setup.md`.
-
-### Storage
-Auto-discovers nodes via indexer. Just need `ZG_INDEXER_ENDPOINT` + `ZG_FLOW_CONTRACT`.
+Storage auto-discovers nodes via indexer. KV + Log work out of the box once `.env` is filled.
 
 ## Routes
 
