@@ -1,0 +1,23 @@
+{
+  "name": "@agentvault/memory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@0glabs/0g-ts-sdk": "^0.3.1",
+    "@agentvault/types": "workspace:*",
+    "ethers": "6.13.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}
