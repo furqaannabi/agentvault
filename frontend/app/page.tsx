@@ -10,6 +10,7 @@ import type { Proof } from '@/lib/types'
 import { PolicyChecklist as _PolicyChecklist } from '@/components/policy/PolicyChecklist'
 import { ProofStep as _ProofStep } from '@/components/proof/ProofStep'
 import { ProofChain as _ProofChain } from '@/components/proof/ProofChain'
+import { ProofExplorer as _ProofExplorer } from '@/components/proof/ProofExplorer'
 
 const SESSION_ID = 'default'
 
