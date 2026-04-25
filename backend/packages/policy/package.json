@@ -10,7 +10,8 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsc"
+    "build": "tsc",
+    "test": "vitest run"
   },
   "dependencies": {
     "@agentvault/twin": "workspace:*",
@@ -18,6 +19,7 @@
     "ethers": "6.13.1"
   },
   "devDependencies": {
+    "@agentvault/mocks": "workspace:*",
     "typescript": "^5.5.0"
   }
 }
