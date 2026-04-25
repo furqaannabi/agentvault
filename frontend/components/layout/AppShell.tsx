@@ -2,7 +2,7 @@
 
 import React, { useState, createContext, useContext, useCallback } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Label, Mono } from '@/components/design-system/Typography'
 import { useChatStore } from '@/lib/store/chatStore'
@@ -100,12 +100,19 @@ function relativeTime(ts: number): string {
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
 function SidebarInner() {
-  const pathname       = usePathname()
-  const sessions       = useChatStore((s) => s.sessions)
-  const activeId       = useChatStore((s) => s.activeSessionId)
-  const isStreaming    = useChatStore((s) => s.isStreaming)
-  const createSession  = useChatStore((s) => s.createSession)
+  const pathname         = usePathname()
+  const router           = useRouter()
+  const sessions         = useChatStore((s) => s.sessions)
+  const activeId         = useChatStore((s) => s.activeSessionId)
+  const isStreaming      = useChatStore((s) => s.isStreaming)
+  const createSession    = useChatStore((s) => s.createSession)
   const setActiveSession = useChatStore((s) => s.setActiveSession)
+
+  function goToChat(sessionId?: string) {
+    if (sessionId) setActiveSession(sessionId)
+    else createSession()
+    if (pathname !== '/') router.push('/')
+  }
 
   return (
     <aside
@@ -202,7 +209,7 @@ function SidebarInner() {
       {/* New chat */}
       <div style={{ padding: 'var(--space-3) var(--space-4)', flexShrink: 0 }}>
         <button
-          onClick={createSession}
+          onClick={() => goToChat()}
           style={{
             display:        'flex',
             alignItems:     'center',
@@ -244,7 +251,7 @@ function SidebarInner() {
             return (
               <button
                 key={session.id}
-                onClick={() => setActiveSession(session.id)}
+                onClick={() => goToChat(session.id)}
                 style={{
                   display:         'block',
                   width:           '100%',
@@ -340,7 +347,7 @@ function TopBar() {
       </Label>
 
       {/* Right actions slot — version tag */}
-      <Mono size="xs" color="muted" as="span">
+      <Mono size="xs" color="secondary" as="span">
         ProofTwin · V.2.4.0
       </Mono>
     </header>

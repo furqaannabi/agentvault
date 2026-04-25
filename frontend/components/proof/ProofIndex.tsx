@@ -170,7 +170,7 @@ export function ProofIndex() {
           PROOF HISTORY
         </Label>
         {!loading ? (
-          <Label color="muted" style={{ fontSize: 'var(--text-xs)' }}>
+          <Label color="secondary" style={{ fontSize: 'var(--text-xs)' }}>
             {storeProofs.length} RECORD{storeProofs.length !== 1 ? 'S' : ''}
           </Label>
         ) : null}
@@ -187,9 +187,9 @@ export function ProofIndex() {
           backgroundColor:     'var(--color-bg-inset)',
         }}
       >
-        <Label color="muted" style={{ fontSize: 'var(--text-xs)' }}>TRADE</Label>
-        <Label color="muted" style={{ fontSize: 'var(--text-xs)' }}>TIME</Label>
-        <Label color="muted" style={{ fontSize: 'var(--text-xs)' }}>STATUS</Label>
+        <Label color="secondary" style={{ fontSize: 'var(--text-xs)' }}>TRADE</Label>
+        <Label color="secondary" style={{ fontSize: 'var(--text-xs)' }}>TIME</Label>
+        <Label color="secondary" style={{ fontSize: 'var(--text-xs)' }}>STATUS</Label>
         <span />
       </div>
 

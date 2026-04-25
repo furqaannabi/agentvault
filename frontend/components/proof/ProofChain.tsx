@@ -77,7 +77,7 @@ export const ProofChain = memo(function ProofChain({ steps, isLoading = false }:
           ATTESTATION LEDGER
         </Label>
         {!isLoading ? (
-          <Label color="muted" style={{ fontSize: 'var(--text-xs)' }}>
+          <Label color="secondary" style={{ fontSize: 'var(--text-xs)' }}>
             {steps.length} STEP{steps.length !== 1 ? 'S' : ''}
           </Label>
         ) : null}
@@ -95,8 +95,8 @@ export const ProofChain = memo(function ProofChain({ steps, isLoading = false }:
         }}
       >
         <span />
-        <Label color="muted" style={{ fontSize: 'var(--text-xs)' }}>STAGE · HASH</Label>
-        <Label color="muted" style={{ fontSize: 'var(--text-xs)' }}>STATUS</Label>
+        <Label color="secondary" style={{ fontSize: 'var(--text-xs)' }}>STAGE · HASH</Label>
+        <Label color="secondary" style={{ fontSize: 'var(--text-xs)' }}>STATUS</Label>
         <span />
       </div>
 
@@ -113,7 +113,7 @@ export const ProofChain = memo(function ProofChain({ steps, isLoading = false }:
       {/* Empty */}
       {!isLoading && steps.length === 0 ? (
         <div style={{ padding: 'var(--space-8) var(--space-4)', textAlign: 'center' }}>
-          <Label color="muted" style={{ fontSize: 'var(--text-xs)' }}>
+          <Label color="secondary" style={{ fontSize: 'var(--text-xs)' }}>
             NO PROOF STEPS
           </Label>
         </div>
