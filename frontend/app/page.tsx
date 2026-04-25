@@ -1,34 +1,32 @@
 'use client'
 
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useEffect } from 'react'
 import { ChatStream, type ChatStreamHandle } from '@/components/chat/ChatStream'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { ApprovalPrompt } from '@/components/chat/ApprovalPrompt'
+import { ProofIndex } from '@/components/proof/ProofIndex'
 import { useChatStore } from '@/lib/store/chatStore'
 import { useProofStore } from '@/lib/store/proofStore'
 import type { Proof } from '@/lib/types'
-import { PolicyChecklist as _PolicyChecklist } from '@/components/policy/PolicyChecklist'
-import { ProofStep as _ProofStep } from '@/components/proof/ProofStep'
-import { ProofChain as _ProofChain } from '@/components/proof/ProofChain'
-import { ProofExplorer as _ProofExplorer } from '@/components/proof/ProofExplorer'
-import { ProofIndex as _ProofIndex } from '@/components/proof/ProofIndex'
-
-const SESSION_ID = 'default'
 
 export default function HomePage() {
-  const streamRef       = useRef<ChatStreamHandle>(null)
+  const streamRef      = useRef<ChatStreamHandle>(null)
+  const activeId       = useChatStore((s) => s.activeSessionId)
+  const createSession  = useChatStore((s) => s.createSession)
   const pendingProposal = useChatStore((s) => s.pendingProposal)
-  const setPending      = useChatStore((s) => s.setPendingProposal)
-  const addMessage      = useChatStore((s) => s.addMessage)
-  const isStreaming     = useChatStore((s) => s.isStreaming)
-  const addProof        = useProofStore((s) => s.addProof)
+  const setPending     = useChatStore((s) => s.setPendingProposal)
+  const addMessage     = useChatStore((s) => s.addMessage)
+  const isStreaming    = useChatStore((s) => s.isStreaming)
+  const addProof       = useProofStore((s) => s.addProof)
+
+  // Seed a session on first load if none exists
+  useEffect(() => {
+    if (!activeId) createSession()
+  }, [activeId, createSession])
 
   const handleApproved = useCallback((proof: Proof) => {
-    // Persist proof in store
     addProof(proof)
-    // Clear pending proposal
     setPending(null)
-    // Add confirmation message to chat
     addMessage({
       id:        crypto.randomUUID(),
       role:      'twin',
@@ -47,26 +45,45 @@ export default function HomePage() {
     })
   }, [setPending, addMessage])
 
+  if (!activeId) return null
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <ChatStream
-        ref={streamRef}
-        sessionId={SESSION_ID}
-        onProposalReceived={() => {}}
-      />
-
-      {pendingProposal && (
-        <ApprovalPrompt
-          proposal={pendingProposal}
-          onApproved={handleApproved}
-          onRejected={handleRejected}
+    <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
+      {/* ── Left: chat panel ──────────────────────────────────── */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+        <ChatStream
+          ref={streamRef}
+          sessionId={activeId}
+          onProposalReceived={() => {}}
         />
-      )}
 
-      <ChatInput
-        onSend={(msg) => streamRef.current?.sendMessage(msg)}
-        disabled={isStreaming || !!pendingProposal}
-      />
+        {pendingProposal ? (
+          <ApprovalPrompt
+            proposal={pendingProposal}
+            onApproved={handleApproved}
+            onRejected={handleRejected}
+          />
+        ) : null}
+
+        <ChatInput
+          onSend={(msg) => streamRef.current?.sendMessage(msg)}
+          disabled={isStreaming || !!pendingProposal}
+        />
+      </div>
+
+      {/* ── Right: proof history panel ────────────────────────── */}
+      <div
+        style={{
+          width:       360,
+          flexShrink:  0,
+          borderLeft:  'var(--border-width) solid var(--color-border)',
+          overflowY:   'auto',
+          padding:     'var(--space-4)',
+          backgroundColor: 'var(--color-bg-surface)',
+        }}
+      >
+        <ProofIndex />
+      </div>
     </div>
   )
 }

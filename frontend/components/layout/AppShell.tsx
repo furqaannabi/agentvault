@@ -99,16 +99,13 @@ function relativeTime(ts: number): string {
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
-interface SidebarInnerProps {
-  onNewChat:       () => void
-  onSelectSession: (id: string) => void
-}
-
-function SidebarInner({ onNewChat, onSelectSession }: SidebarInnerProps) {
-  const pathname      = usePathname()
-  const sessions      = useChatStore((s) => s.sessions)
-  const activeId      = useChatStore((s) => s.activeSessionId)
-  const isStreaming   = useChatStore((s) => s.isStreaming)
+function SidebarInner() {
+  const pathname       = usePathname()
+  const sessions       = useChatStore((s) => s.sessions)
+  const activeId       = useChatStore((s) => s.activeSessionId)
+  const isStreaming    = useChatStore((s) => s.isStreaming)
+  const createSession  = useChatStore((s) => s.createSession)
+  const setActiveSession = useChatStore((s) => s.setActiveSession)
 
   return (
     <aside
@@ -205,7 +202,7 @@ function SidebarInner({ onNewChat, onSelectSession }: SidebarInnerProps) {
       {/* New chat */}
       <div style={{ padding: 'var(--space-3) var(--space-4)', flexShrink: 0 }}>
         <button
-          onClick={onNewChat}
+          onClick={createSession}
           style={{
             display:        'flex',
             alignItems:     'center',
@@ -247,7 +244,7 @@ function SidebarInner({ onNewChat, onSelectSession }: SidebarInnerProps) {
             return (
               <button
                 key={session.id}
-                onClick={() => onSelectSession(session.id)}
+                onClick={() => setActiveSession(session.id)}
                 style={{
                   display:         'block',
                   width:           '100%',
@@ -353,16 +350,10 @@ function TopBar() {
 // ── AppShell ───────────────────────────────────────────────────────────────────
 
 interface AppShellProps {
-  children:        React.ReactNode
-  onNewChat?:      () => void
-  onSelectSession?: (id: string) => void
+  children: React.ReactNode
 }
 
-export function AppShell({
-  children,
-  onNewChat       = () => {},
-  onSelectSession = () => {},
-}: AppShellProps) {
+export function AppShell({ children }: AppShellProps) {
   const [isOpen, setIsOpen]               = useState(false)
   const [drawerContent, setDrawerContent] = useState<React.ReactNode>(null)
 
@@ -380,10 +371,7 @@ export function AppShell({
         minHeight:       '100vh',
         backgroundColor: 'var(--color-bg-base)',
       }}>
-        <SidebarInner
-          onNewChat={onNewChat}
-          onSelectSession={onSelectSession}
-        />
+        <SidebarInner />
 
         {/* Main */}
         <main style={{
