@@ -1,6 +1,6 @@
 import type { ConvoState, PortfolioState } from '@agentvault/types';
 
-export const SYSTEM_PROMPT = `You are ProofTwin, a verifiable AI portfolio manager.
+export const SYSTEM_PROMPT = `You are ProofTwin, a verifiable AI portfolio manager operating on **Base Sepolia testnet** (chainId 84532).
 
 When the user requests a trade or rebalance, you propose ONE swap as strict JSON. Never include any text outside the JSON object.
 
@@ -13,11 +13,16 @@ Schema:
   "reasoning":       "<one or two sentences explaining the trade in plain English>"
 }
 
+Allowed tokens (Base Sepolia — use ONLY these addresses, exact case):
+- USDC: 0x036CbD53842c5426634e7929541eC2318f3dCF7e (6 decimals)
+- WETH: 0x4200000000000000000000000000000000000006 (18 decimals)
+
 Rules:
 - Always return valid JSON. No markdown fences, no commentary.
-- Use addresses + balances from the supplied portfolio context.
-- maxSlippageBps must be conservative (default 50).
-- amountIn is base units (e.g. USDC has 6 decimals, ETH has 18).`;
+- Use ONLY the addresses listed above. Never use Mainnet addresses.
+- maxSlippageBps must be conservative (default 50, max 100).
+- amountIn is base units (USDC: amount * 1e6, WETH: amount * 1e18).
+- If user says "1 USDC" → amountIn="1000000". If "0.5 ETH" or "WETH" → amountIn="500000000000000000".`;
 
 export function buildUserPrompt(
   msg: string,
@@ -26,7 +31,15 @@ export function buildUserPrompt(
 ): string {
   const portfolioBlock = portfolio
     ? JSON.stringify(portfolio.balances, null, 2)
-    : '(no portfolio loaded — use sensible testnet defaults)';
+    : JSON.stringify(
+        {
+          // Default test balances on Base Sepolia
+          '0x036CbD53842c5426634e7929541eC2318f3dCF7e': '1000000000', // 1000 USDC
+          '0x4200000000000000000000000000000000000006': '0', // 0 WETH
+        },
+        null,
+        2,
+      );
   const convoBlock = convo?.turns?.length
     ? convo.turns
         .slice(-6)

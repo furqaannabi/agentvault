@@ -10,6 +10,8 @@ export function makeComputeClient(cfg: TwinConfig): ComputeClient {
   const client = new OpenAI({
     apiKey: cfg.computeApiKey,
     baseURL: cfg.computeBaseUrl,
+    timeout: 120_000, // 0G providers can be slow on cold start
+    maxRetries: 1,
   });
   return {
     cfg,
@@ -21,6 +23,7 @@ export function makeComputeClient(cfg: TwinConfig): ComputeClient {
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.2,
+        max_tokens: 400, // proposals are small JSON; cap to keep latency bounded
       });
       const text = res.choices[0]?.message?.content ?? '';
       if (!text) throw new Error('empty completion');

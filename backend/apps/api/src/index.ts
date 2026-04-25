@@ -1,15 +1,32 @@
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { config as loadEnv } from 'dotenv';
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import { logger } from 'hono/logger';
 import { buildDeps } from './deps.js';
 import { approveRoute } from './routes/approve.js';
 import { chatRoute } from './routes/chat.js';
 import { proofRoute } from './routes/proof.js';
 import { pubkeyRoute } from './routes/pubkey.js';
 
-loadEnv();
+// Resolve backend/.env regardless of cwd (apps/api vs backend root)
+const __dirname = dirname(fileURLToPath(import.meta.url));
+loadEnv({ path: resolve(__dirname, '../../../.env') });
+loadEnv(); // also try cwd as fallback
 
 const app = new Hono();
+app.use('*', logger());
+app.use(
+  '*',
+  cors({
+    origin: (o) => o ?? '*',
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    allowHeaders: ['content-type', 'authorization'],
+    maxAge: 600,
+  }),
+);
 
 app.get('/', (c) =>
   c.json({

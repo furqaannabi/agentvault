@@ -37,12 +37,17 @@ export function createTwin(deps: TwinDeps): Twin {
 
   return {
     async handle(userId, msg) {
+      const t0 = Date.now();
       const [portfolio, convo] = await Promise.all([
         deps.memory.getPortfolio(userId),
         deps.memory.getConvo(userId),
       ]);
+      const tKv = Date.now();
+      console.log(`[twin] kv reads: ${tKv - t0}ms`);
       const userPrompt = buildUserPrompt(msg, portfolio, convo);
       const output = await compute.infer(SYSTEM_PROMPT, userPrompt);
+      const tCompute = Date.now();
+      console.log(`[twin] compute: ${tCompute - tKv}ms`);
       const parsed = parseProposal(output);
       const inference = await attestInference(signer, {
         providerUrl: cfg.computeBaseUrl,
@@ -76,6 +81,7 @@ export function createTwin(deps: TwinDeps): Twin {
       };
       await deps.memory.setConvo(updatedConvo);
       await deps.memory.setProposal(proposal);
+      console.log(`[twin] handle total: ${Date.now() - t0}ms`);
       return proposal;
     },
 

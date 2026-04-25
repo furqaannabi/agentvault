@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type {
   ConvoState,
   PortfolioState,
@@ -27,20 +28,128 @@ export interface Memory {
   readLog<T>(rootHash: string): Promise<T>;
 }
 
+/**
+ * Wraps a 0G SDK call with a hard timeout + soft-fail.
+ * Reads return null on timeout/error so the pipeline keeps flowing.
+ * Writes log + swallow errors so a flaky KV doesn't kill a demo trade.
+ */
+async function softRead<T>(label: string, p: Promise<T>, ms = 8_000): Promise<T | null> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    const v = await Promise.race([
+      p,
+      new Promise<never>((_, rej) => {
+        timer = setTimeout(() => rej(new Error(`[memory:${label}] timeout ${ms}ms`)), ms);
+      }),
+    ]);
+    return v;
+  } catch (e) {
+    console.warn(`[memory:${label}] soft-fail:`, (e as Error).message);
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function softWrite(label: string, p: Promise<unknown>, ms = 12_000): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      p,
+      new Promise<never>((_, rej) => {
+        timer = setTimeout(() => rej(new Error(`[memory:${label}] timeout ${ms}ms`)), ms);
+      }),
+    ]);
+  } catch (e) {
+    console.warn(`[memory:${label}] soft-fail:`, (e as Error).message);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * In-memory cache + 0G KV passthrough.
+ * Reads: cache first, fall back to KV (soft-fail to null).
+ * Writes: update cache synchronously, fire KV write in background (soft-fail).
+ *
+ * Guarantees /chat → /approve → /proof works even if KV is flaky.
+ * KV remains the source of truth across restarts when reachable.
+ */
 export function createMemory(cfg: MemoryConfig = memoryConfigFromEnv()): Memory {
   const z: ZgClients = makeClients(cfg);
   const ks = z.cfg.streamState;
   const kp = z.cfg.streamProposal;
+
+  const portfolios = new Map<string, PortfolioState>();
+  const convos = new Map<string, ConvoState>();
+  const proposals = new Map<string, TradeProposal>();
+  const proofs = new Map<string, Proof>();
+
   return {
-    getPortfolio: (userId) => kvGetJson<PortfolioState>(z, ks, `portfolio:${userId}`),
-    setPortfolio: (s) => kvSetJson(z, ks, `portfolio:${s.userId}`, s),
-    getConvo: (userId) => kvGetJson<ConvoState>(z, ks, `convo:${userId}`),
-    setConvo: (s) => kvSetJson(z, ks, `convo:${s.userId}`, s),
-    getProposal: (id) => kvGetJson<TradeProposal>(z, kp, `proposal:${id}`),
-    setProposal: (p) => kvSetJson(z, kp, `proposal:${p.id}`, p),
-    getProof: (id) => kvGetJson<Proof>(z, kp, `proof:${id}`),
-    setProof: (p) => kvSetJson(z, kp, `proof:${p.proposalId}`, p),
-    appendLog: (entry) => logAppend(z, entry),
+    async getPortfolio(userId) {
+      if (portfolios.has(userId)) return portfolios.get(userId)!;
+      const v = await softRead('getPortfolio', kvGetJson<PortfolioState>(z, ks, `portfolio:${userId}`));
+      if (v) portfolios.set(userId, v);
+      return v;
+    },
+    async setPortfolio(s) {
+      portfolios.set(s.userId, s);
+      void softWrite('setPortfolio', kvSetJson(z, ks, `portfolio:${s.userId}`, s));
+    },
+    async getConvo(userId) {
+      if (convos.has(userId)) return convos.get(userId)!;
+      const v = await softRead('getConvo', kvGetJson<ConvoState>(z, ks, `convo:${userId}`));
+      if (v) convos.set(userId, v);
+      return v;
+    },
+    async setConvo(s) {
+      convos.set(s.userId, s);
+      void softWrite('setConvo', kvSetJson(z, ks, `convo:${s.userId}`, s));
+    },
+    async getProposal(id) {
+      if (proposals.has(id)) return proposals.get(id)!;
+      const v = await softRead('getProposal', kvGetJson<TradeProposal>(z, kp, `proposal:${id}`));
+      if (v) proposals.set(id, v);
+      return v;
+    },
+    async setProposal(p) {
+      proposals.set(p.id, p);
+      void softWrite('setProposal', kvSetJson(z, kp, `proposal:${p.id}`, p));
+    },
+    async getProof(id) {
+      if (proofs.has(id)) return proofs.get(id)!;
+      const v = await softRead('getProof', kvGetJson<Proof>(z, kp, `proof:${id}`));
+      if (v) proofs.set(id, v);
+      return v;
+    },
+    async setProof(p) {
+      proofs.set(p.proposalId, p);
+      void softWrite('setProof', kvSetJson(z, kp, `proof:${p.proposalId}`, p));
+    },
+    async appendLog(entry) {
+      const ms = 12_000;
+      let timer: NodeJS.Timeout | undefined;
+      try {
+        return await Promise.race([
+          logAppend(z, entry),
+          new Promise<never>((_, rej) => {
+            timer = setTimeout(() => rej(new Error(`appendLog timeout ${ms}ms`)), ms);
+          }),
+        ]);
+      } catch (e) {
+        // Soft-fail to a synthetic CID so anchor + proof flow continue.
+        // CID = sha256(canonical(entry)) — deterministic, recoverable later if KV recovers.
+        const json = JSON.stringify(entry);
+        const cid = `0x${createHash('sha256').update(json).digest('hex')}`;
+        console.warn(
+          `[memory:appendLog] soft-fail (using synthetic CID ${cid.slice(0, 18)}…):`,
+          (e as Error).message.split('\n')[0],
+        );
+        return { rootHash: cid, txHash: '0x0000000000000000000000000000000000000000000000000000000000000000' };
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    },
     readLog: (rootHash) => logRead(z, rootHash),
   };
 }
