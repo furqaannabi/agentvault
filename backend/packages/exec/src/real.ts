@@ -13,7 +13,7 @@ import type { ExecConfig } from './index.js';
  *
  * Sub-modules suggested:
  *   packages/wallet     — viem signer, gas, nonce, tx wait
- *   packages/uniswap    — v3 quoter + router calls
+ *   packages/uniswap-api — Uniswap Trade API approval, quote, swap calls
  *
  * Imported by apps/api when EXEC_MODE=real.
  */

@@ -39,7 +39,7 @@ const result = await adapter.swap({ proposal, verdict });
 
 ```
 packages/wallet/       # viem signer, gas estimator, nonce mgmt, tx wait
-packages/uniswap/      # v3 quote + swap helpers
+packages/uniswap-api/  # Uniswap Trade API approval, quote, swap helpers
 ```
 
 `real.ts` orchestrates them.
