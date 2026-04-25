@@ -25,12 +25,13 @@ export interface ChatStreamHandle {
 interface ChatStreamProps {
   sessionId:           string
   onProposalReceived?: (proposal: TradeProposal) => void
+  onProofReady?:       (proofId: string) => void
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export const ChatStream = forwardRef<ChatStreamHandle, ChatStreamProps>(
-  function ChatStream({ sessionId, onProposalReceived }, ref) {
+  function ChatStream({ sessionId, onProposalReceived, onProofReady }, ref) {
     const messages        = useChatStore((s) => s.messages)
     const isStreaming     = useChatStore((s) => s.isStreaming)
     const addMessage      = useChatStore((s) => s.addMessage)
@@ -60,23 +61,32 @@ export const ChatStream = forwardRef<ChatStreamHandle, ChatStreamProps>(
           timestamp: Date.now(),
         })
 
-        // Seed the twin's streaming message
-        const twinMsgId = crypto.randomUUID()
-        addMessage({
-          id:          twinMsgId,
-          role:        'twin',
-          content:     '',
-          timestamp:   Date.now(),
-          isStreaming: true,
-        })
+        // Twin bubble is seeded on the first text chunk, not upfront,
+        // so a proposal-only response doesn't leave an empty bubble.
+        let twinBubbleSeeded = false
 
         try {
           for await (const chunk of streamChat(content, sessionId)) {
             if (chunk.type === 'text') {
+              if (!twinBubbleSeeded) {
+                addMessage({
+                  id:          crypto.randomUUID(),
+                  role:        'twin',
+                  content:     '',
+                  timestamp:   Date.now(),
+                  isStreaming: true,
+                })
+                twinBubbleSeeded = true
+              }
               updateLastMessage(chunk.payload as string)
             } else if (chunk.type === 'proposal') {
               setPendingProposal(chunk.payload as TradeProposal)
               onProposalReceived?.(chunk.payload as TradeProposal)
+              finalizeStream()
+              break
+            } else if (chunk.type === 'proof_ready') {
+              const { proofId } = chunk.payload as { proofId: string }
+              onProofReady?.(proofId)
               finalizeStream()
               break
             } else if (chunk.type === 'error') {
@@ -100,6 +110,7 @@ export const ChatStream = forwardRef<ChatStreamHandle, ChatStreamProps>(
         finalizeStream,
         setPendingProposal,
         onProposalReceived,
+        onProofReady,
       ],
     )
 

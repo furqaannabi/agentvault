@@ -18,7 +18,14 @@ function proofToSteps(proof: Proof): ProofStep[] {
 
   return [
     {
-      index:      0,
+      index:  0,
+      label:  'TWIN_REASONING',
+      hash:   proof.proposal.id,
+      status: 'verified' as const,
+      detail: proof.proposal.reasoning,
+    },
+    {
+      index:      1,
       label:      'OG_COMPUTE_ATTESTATION',
       hash:       proof.verdict.teemlAttestation,
       status:     'verified',
@@ -26,14 +33,14 @@ function proofToSteps(proof: Proof): ProofStep[] {
       detail:     'TeeML sealed inference attestation from 0G Compute node. Reasoning was executed inside a trusted execution environment.',
     },
     {
-      index:  1,
+      index:  2,
       label:  'POLICY_VERDICT',
       hash:   proof.verdict.sig,
       status: proof.verdict.ok ? 'verified' : 'failed',
       detail: `${passCount}/${total} deterministic rules passed. ${proof.verdict.ok ? 'Trade cleared for execution.' : 'Trade blocked by policy engine.'}`,
     },
     {
-      index:      2,
+      index:      3,
       label:      'UNISWAP_EXECUTION',
       hash:       proof.exec.txHash,
       status:     proof.exec.status === 'success' ? 'verified' : 'failed',
@@ -41,7 +48,7 @@ function proofToSteps(proof: Proof): ProofStep[] {
       detail:     `Settled at block ${proof.exec.blockNumber}. Received ${proof.exec.amountOut}. Gas used: ${proof.exec.gasUsed}.`,
     },
     {
-      index:      3,
+      index:      4,
       label:      'ON_CHAIN_ANCHOR',
       hash:       proof.anchorTx,
       status:     'verified',
@@ -49,7 +56,7 @@ function proofToSteps(proof: Proof): ProofStep[] {
       detail:     'Merkle root of the full proof chain anchored to 0G Chain via ProofAnchor.sol.',
     },
     {
-      index:      4,
+      index:      5,
       label:      'STORAGE_LOG',
       hash:       proof.logCid,
       status:     'verified',
@@ -195,9 +202,10 @@ export function ProofExplorer({ proofId }: ProofExplorerProps) {
   const cachedProof = useProofStore((s) => s.proofs[proofId])
   const addProof    = useProofStore((s) => s.addProof)
 
-  const [proof, setProof]   = useState<Proof | null>(cachedProof ?? null)
+  const [proof, setProof]     = useState<Proof | null>(cachedProof ?? null)
   const [loading, setLoading] = useState(!cachedProof)
-  const [error, setError]   = useState<string | null>(null)
+  const [error, setError]     = useState<string | null>(null)
+  const [retryCount, setRetry] = useState(0)
 
   useEffect(() => {
     if (cachedProof) {
@@ -207,6 +215,7 @@ export function ProofExplorer({ proofId }: ProofExplorerProps) {
     }
     let cancelled = false
     setLoading(true)
+    setError(null)
     getProof(proofId)
       .then((data) => {
         if (cancelled) return
@@ -221,7 +230,7 @@ export function ProofExplorer({ proofId }: ProofExplorerProps) {
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [proofId, cachedProof, addProof])
+  }, [proofId, cachedProof, addProof, retryCount])
 
   // ── Error ──────────────────────────────────────────────────────────────────
   if (error) {
@@ -239,7 +248,7 @@ export function ProofExplorer({ proofId }: ProofExplorerProps) {
         >
           <Mono size="sm" color="red" as="span">{error}</Mono>
           <button
-            onClick={() => { setError(null); setLoading(true) }}
+            onClick={() => setRetry((n) => n + 1)}
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
               fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)',

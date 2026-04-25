@@ -46,10 +46,15 @@ export function ApprovalPrompt({
   function handleReject() {
     if (busy) return
     setStatus('rejecting')
-    rejectProposal(proposal.id).finally(() => {
-      setStatus('done')
-      onRejected()
-    })
+    rejectProposal(proposal.id)
+      .then(() => {
+        setStatus('done')
+        onRejected()
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Rejection failed.')
+        setStatus('pending')
+      })
   }
 
   return (
@@ -57,9 +62,9 @@ export function ApprovalPrompt({
       <motion.div
         animate={{
           boxShadow: [
-            '0 0 0 1px rgba(245,166,35,0.4)',
-            '0 0 0 3px rgba(245,166,35,0.15)',
-            '0 0 0 1px rgba(245,166,35,0.4)',
+            '0 0 0 1px var(--color-accent-amber)',
+            '0 0 0 3px var(--color-accent-amber-dim)',
+            '0 0 0 1px var(--color-accent-amber)',
           ],
         }}
         transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}

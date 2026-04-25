@@ -25,20 +25,6 @@ export function useDrawer() {
   return useContext(DrawerContext)
 }
 
-// ── Nav config ─────────────────────────────────────────────────────────────────
-
-const NAV_ITEMS = [
-  { label: 'DECISION LOG',     href: '/',       phase: 1, icon: <IconLog />    },
-  { label: 'SPECIALIST SWARM', href: '/swarm',  phase: 2, icon: <IconSwarm />  },
-  { label: 'POLICY ENGINE',    href: '/policy', phase: 2, icon: <IconPolicy /> },
-  { label: 'PROOF EXPLORER',   href: '/proof',  phase: 1, icon: <IconProof />  },
-] as const
-
-const BOTTOM_ITEMS = [
-  { label: 'SYSTEM STATUS',  href: '/status' },
-  { label: 'DOCUMENTATION',  href: '/docs'   },
-]
-
 // ── Icons ──────────────────────────────────────────────────────────────────────
 
 function IconLog() {
@@ -84,6 +70,20 @@ function IconProof() {
     </svg>
   )
 }
+
+// ── Nav config ─────────────────────────────────────────────────────────────────
+
+const NAV_ITEMS = [
+  { label: 'DECISION LOG',     href: '/',       phase: 1, icon: <IconLog />    },
+  { label: 'SPECIALIST SWARM', href: '/swarm',  phase: 2, icon: <IconSwarm />  },
+  { label: 'POLICY ENGINE',    href: '/policy', phase: 2, icon: <IconPolicy /> },
+  { label: 'PROOF EXPLORER',   href: '/proof',  phase: 1, icon: <IconProof />  },
+] as const
+
+const BOTTOM_ITEMS = [
+  { label: 'SYSTEM STATUS',  href: '/status' },
+  { label: 'DOCUMENTATION',  href: '/docs'   },
+]
 
 // ── Relative time ──────────────────────────────────────────────────────────────
 
@@ -170,7 +170,7 @@ function SidebarInner() {
                 color:          isPhase2
                   ? 'var(--color-text-muted)'
                   : isActive
-                    ? '#ffffff'
+                    ? 'var(--color-text-primary)'
                     : 'var(--color-text-primary)',
                 textDecoration: 'none',
                 backgroundColor: isActive ? 'var(--color-bg-elevated)' : 'transparent',
@@ -225,7 +225,7 @@ function SidebarInner() {
             e.currentTarget.style.color       = 'var(--color-text-secondary)'
           }}
         >
-          <span style={{ fontSize: 14, lineHeight: 1, flexShrink: 0 }}>+</span>
+          <span style={{ fontSize: 'var(--text-base)', lineHeight: 1, flexShrink: 0 }}>+</span>
           <Label style={{ fontSize: 'var(--text-xs)' }}>New Chat</Label>
         </button>
       </div>
@@ -401,7 +401,7 @@ export function AppShell({ children }: AppShellProps) {
                 style={{
                   position:        'fixed',
                   inset:           0,
-                  backgroundColor: 'rgba(8, 12, 16, 0.7)',
+                  backgroundColor: 'var(--color-backdrop)',
                   zIndex:          'var(--z-overlay)',
                 }}
               />
