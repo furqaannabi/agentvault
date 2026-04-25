@@ -1,6 +1,14 @@
 import type { Proof, StreamChunk } from './types'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? ''
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+
+async function safeJson<T>(res: Response): Promise<T> {
+  const text = await res.text()
+  if (text.trimStart().startsWith('<')) {
+    throw new Error('Backend not reachable — is the API server running?')
+  }
+  return JSON.parse(text) as T
+}
 
 // POST /chat → SSE stream of StreamChunks
 // Yields text deltas, then a proposal chunk, then optionally proof_ready
@@ -58,7 +66,7 @@ export async function approveProposal(proposalId: string): Promise<Proof> {
     body:    JSON.stringify({ proposalId }),
   })
   if (!response.ok) throw new Error(`Approve failed: ${response.status}`)
-  return response.json()
+  return safeJson<Proof>(response)
 }
 
 // POST /approve with reject flag — signals user rejected the trade
@@ -74,12 +82,12 @@ export async function rejectProposal(proposalId: string): Promise<void> {
 export async function getProof(id: string): Promise<Proof> {
   const response = await fetch(`${API_BASE}/proof/${id}`)
   if (!response.ok) throw new Error(`Failed to fetch proof: ${response.status}`)
-  return response.json()
+  return safeJson<Proof>(response)
 }
 
 // GET /proof → list of all Proofs (for ProofIndex)
 export async function getProofs(): Promise<Proof[]> {
   const response = await fetch(`${API_BASE}/proof`)
   if (!response.ok) throw new Error(`Failed to fetch proofs: ${response.status}`)
-  return response.json()
+  return safeJson<Proof[]>(response)
 }

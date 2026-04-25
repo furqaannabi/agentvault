@@ -74,11 +74,10 @@ export default function HomePage() {
       {/* ── Right: proof history panel ────────────────────────── */}
       <div
         style={{
-          width:       360,
-          flexShrink:  0,
-          borderLeft:  'var(--border-width) solid var(--color-border)',
-          overflowY:   'auto',
-          padding:     'var(--space-4)',
+          width:           320,
+          flexShrink:      0,
+          borderLeft:      'var(--border-width) solid var(--color-border)',
+          overflowY:       'auto',
           backgroundColor: 'var(--color-bg-surface)',
         }}
       >
