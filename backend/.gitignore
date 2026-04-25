@@ -1,0 +1,16 @@
+node_modules
+dist
+out
+cache
+broadcast
+.env
+.env.local
+*.log
+.DS_Store
+.turbo
+coverage
+*.tsbuildinfo
+
+# Foundry
+forge-cache
+forge-out
