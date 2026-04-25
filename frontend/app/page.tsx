@@ -7,6 +7,7 @@ import { ApprovalPrompt } from '@/components/chat/ApprovalPrompt'
 import { useChatStore } from '@/lib/store/chatStore'
 import { useProofStore } from '@/lib/store/proofStore'
 import type { Proof } from '@/lib/types'
+import { PolicyChecklist as _PolicyChecklist } from '@/components/policy/PolicyChecklist'
 
 const SESSION_ID = 'default'
 
