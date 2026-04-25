@@ -11,6 +11,7 @@ import { PolicyChecklist as _PolicyChecklist } from '@/components/policy/PolicyC
 import { ProofStep as _ProofStep } from '@/components/proof/ProofStep'
 import { ProofChain as _ProofChain } from '@/components/proof/ProofChain'
 import { ProofExplorer as _ProofExplorer } from '@/components/proof/ProofExplorer'
+import { ProofIndex as _ProofIndex } from '@/components/proof/ProofIndex'
 
 const SESSION_ID = 'default'
 
