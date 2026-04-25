@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { parseProposal, parseSanity } from '../src/parse.js';
 
 const valid = {
-  tokenIn: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
-  tokenOut: '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14',
+  tokenIn: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  tokenOut: '0x4200000000000000000000000000000000000006',
   amountIn: '500000000',
   maxSlippageBps: 50,
   reasoning: 'rebalance',

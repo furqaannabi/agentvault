@@ -12,10 +12,10 @@ const ZERO_SIG: Hex =
 const ZERO_ADDR: Hex = '0x0000000000000000000000000000000000000000';
 const ZERO_HASH: Hex = '0x0000000000000000000000000000000000000000000000000000000000000000';
 
-// Ethereum Sepolia (chainId 11155111) — Circle's official USDC + canonical WETH
-export const USDC_SEPOLIA: Hex = '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238';
-export const WETH_SEPOLIA: Hex = '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14';
-export const SEPOLIA_CHAIN_ID = 11155111;
+// Base Sepolia (chainId 84532) — Circle's official USDC + canonical WETH
+export const USDC_BASE_SEPOLIA: Hex = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+export const WETH_BASE_SEPOLIA: Hex = '0x4200000000000000000000000000000000000006';
+export const BASE_SEPOLIA_CHAIN_ID = 84532;
 
 export const mockInference = (overrides: Partial<VerifiableInference> = {}): VerifiableInference => ({
   providerUrl: 'https://mock.0g-compute.local/v1/proxy',
@@ -32,8 +32,8 @@ export const mockProposal = (overrides: Partial<TradeProposal> = {}): TradePropo
   id: 'prop_mock_001',
   userId: 'user_mock_alice',
   action: 'swap',
-  tokenIn: USDC_SEPOLIA,
-  tokenOut: WETH_SEPOLIA,
+  tokenIn: USDC_BASE_SEPOLIA,
+  tokenOut: WETH_BASE_SEPOLIA,
   amountIn: '500000000', // 500 USDC (6 decimals)
   maxSlippageBps: 50,
   reasoning:
@@ -67,7 +67,7 @@ export const mockExecResult = (overrides: Partial<ExecResult> = {}): ExecResult 
   amountOut: '180000000000000000', // ~0.18 ETH
   gasUsed: '150000',
   status: 'success',
-  chainId: 11155111, // Sepolia
+  chainId: BASE_SEPOLIA_CHAIN_ID,
   ...overrides,
 });
 
@@ -79,7 +79,7 @@ export const mockExecRejected = (overrides: Partial<ExecResult> = {}): ExecResul
   gasUsed: '0',
   status: 'failed',
   error: 'mock: slippage exceeded',
-  chainId: 11155111,
+  chainId: BASE_SEPOLIA_CHAIN_ID,
   ...overrides,
 });
 

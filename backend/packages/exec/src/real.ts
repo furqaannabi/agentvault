@@ -5,7 +5,7 @@ import type { ExecConfig } from './index.js';
 
 /**
  * Real execution adapter using the Uniswap Trade API on an EVM testnet.
- * Default chain: Sepolia (11155111). Override via EXEC_CHAIN_ID.
+ * Default chain: Base Sepolia (84532). Override via EXEC_CHAIN_ID.
  *
  * Pipeline per swap:
  *   1. /check_approval → if approval tx returned, send it and wait
@@ -47,7 +47,7 @@ interface SwapResponse {
 
 export function realAdapter(config: ExecConfig): ExecAdapter {
   const apiKey = process.env.UNISWAP_API_KEY ?? '';
-  const chainId = Number(process.env.EXEC_CHAIN_ID ?? 11155111);
+  const chainId = Number(process.env.EXEC_CHAIN_ID ?? 84532);
 
   if (!config.sepoliaPrivateKey) {
     throw new Error('SEPOLIA_PRIVATE_KEY required when EXEC_MODE=real');

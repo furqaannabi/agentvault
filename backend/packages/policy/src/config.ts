@@ -16,10 +16,10 @@ export function policySignerKey(): Hex {
  * USDC has 6 decimals; cap = 1000 USDC = 1_000_000_000 base units.
  */
 export const DEFAULT_POLICY: PolicyDefaults = {
-  // Sepolia USDC + WETH; widen as needed
+  // Base Sepolia USDC + WETH; widen as needed
   whitelist: [
-    '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', // USDC Sepolia
-    '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14', // WETH Sepolia
+    '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // USDC Base Sepolia
+    '0x4200000000000000000000000000000000000006', // WETH Base Sepolia
   ],
   maxAmountIn: 1_000_000_000n, // 1000 USDC base units
   maxSlippageBps: 100, // 1.00%

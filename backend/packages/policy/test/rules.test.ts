@@ -12,8 +12,8 @@ import type { PolicyContext } from '../src/types.js';
 
 const baseCtx: PolicyContext = {
   whitelist: [
-    '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
-    '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14',
+    '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+    '0x4200000000000000000000000000000000000006',
   ],
   maxAmountIn: 1_000_000_000n,
   maxSlippageBps: 100,
