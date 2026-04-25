@@ -5,11 +5,11 @@ import { motion } from 'framer-motion'
 import { Heading, Body, Label, Mono } from '@/components/design-system/Typography'
 import { Badge } from '@/components/design-system/Badge'
 import { approveProposal, rejectProposal } from '@/lib/api'
-import type { TradeProposal } from '@/lib/types'
+import type { TradeProposal, Proof } from '@/lib/types'
 
 interface ApprovalPromptProps {
-  proposal:  TradeProposal
-  onApproved: () => void
+  proposal:   TradeProposal
+  onApproved: (proof: Proof) => void
   onRejected: () => void
 }
 
@@ -34,9 +34,9 @@ export function ApprovalPrompt({
     setStatus('approving')
     setError(null)
     try {
-      await approveProposal(proposal.id)
+      const proof = await approveProposal(proposal.id)
       setStatus('done')
-      onApproved()
+      onApproved(proof)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Approval failed.')
       setStatus('pending')
