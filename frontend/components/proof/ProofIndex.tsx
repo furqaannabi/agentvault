@@ -6,6 +6,7 @@ import { Label, Mono, Body } from '@/components/design-system/Typography'
 import { Badge } from '@/components/design-system/Badge'
 import { getProofs } from '@/lib/api'
 import { useProofStore } from '@/lib/store/proofStore'
+import { useShallow } from 'zustand/react/shallow'
 import type { Proof } from '@/lib/types'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -123,7 +124,9 @@ function ProofRow({ proof }: { proof: Proof }) {
 // ── ProofIndex ─────────────────────────────────────────────────────────────────
 
 export function ProofIndex() {
-  const storeProofs = useProofStore((s) => s.proofList.map((id) => s.proofs[id]))
+  const storeProofs = useProofStore(
+    useShallow((s) => s.proofList.map((id) => s.proofs[id]))
+  )
   const setProofs   = useProofStore((s) => s.setProofs)
 
   const [loading, setLoading] = useState(storeProofs.length === 0)
