@@ -57,6 +57,22 @@ importers:
         specifier: ^5.5.0
         version: 5.9.3
 
+  packages/policy:
+    dependencies:
+      '@agentvault/twin':
+        specifier: workspace:*
+        version: link:../twin
+      '@agentvault/types':
+        specifier: workspace:*
+        version: link:../types
+      ethers:
+        specifier: 6.13.1
+        version: 6.13.1(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+    devDependencies:
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+
   packages/twin:
     dependencies:
       '@agentvault/memory':

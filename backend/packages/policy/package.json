@@ -1,0 +1,23 @@
+{
+  "name": "@agentvault/policy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@agentvault/twin": "workspace:*",
+    "@agentvault/types": "workspace:*",
+    "ethers": "6.13.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}
