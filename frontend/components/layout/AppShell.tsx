@@ -121,13 +121,15 @@ function SidebarInner() {
   const createSession    = useChatStore((s) => s.createSession)
   const setActiveSession = useChatStore((s) => s.setActiveSession)
   const signedSession    = useSessionStore((s) => s.signedSession)
+  const hasHydrated      = useSessionStore((s) => s._hasHydrated)
 
   // Auth guard — redirect to /connect if no session
   React.useEffect(() => {
+    if (!hasHydrated) return
     if (!signedSession && pathname !== '/connect') {
       router.push('/connect')
     }
-  }, [signedSession, pathname, router])
+  }, [signedSession, hasHydrated, pathname, router])
 
   async function handleDisconnect() {
     await deleteSession()

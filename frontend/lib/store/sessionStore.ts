@@ -7,10 +7,12 @@ import type { SignedSession, Config } from '../types'
 interface SessionState {
   signedSession: SignedSession | null
   config:        Config | null
+  _hasHydrated:  boolean
 
   setSession: (s: SignedSession) => void
   clearSession: () => void
   setConfig: (c: Config) => void
+  setHasHydrated: (h: boolean) => void
   authHeader: () => string | null
 }
 
@@ -19,10 +21,12 @@ export const useSessionStore = create<SessionState>()(
     (set, get) => ({
       signedSession: null,
       config:        null,
+      _hasHydrated:  false,
 
-      setSession:   (s) => set({ signedSession: s }),
-      clearSession: ()  => set({ signedSession: null }),
-      setConfig:    (c) => set({ config: c }),
+      setSession:     (s) => set({ signedSession: s }),
+      clearSession:   ()  => set({ signedSession: null }),
+      setConfig:      (c) => set({ config: c }),
+      setHasHydrated: (h) => set({ _hasHydrated: h }),
 
       authHeader: () => {
         const { signedSession } = get()
@@ -36,6 +40,9 @@ export const useSessionStore = create<SessionState>()(
         signedSession: state.signedSession,
         config:        state.config,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state) state.setHasHydrated(true)
+      },
     },
   ),
 )
