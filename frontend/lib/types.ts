@@ -22,12 +22,18 @@ export interface SignedSession {
   signature: Hex
 }
 
+export interface PublicTokenInfo {
+  address:  Hex
+  symbol:   string
+  decimals: number
+}
+
 export interface Config {
   delegate:       Hex
   chainId:        number
   eip712Domain:   Record<string, unknown>
   eip712Types:    Record<string, unknown>
-  allowedTokens:  Hex[]
+  allowedTokens:  PublicTokenInfo[]
 }
 
 // ── Portfolio ─────────────────────────────────────────────────────────────────

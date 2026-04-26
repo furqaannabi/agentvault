@@ -167,7 +167,7 @@ export function ConnectFlow() {
         user:              address as Hex,
         delegate:          config.delegate,
         chainId:           config.chainId,
-        allowedTokens:     config.allowedTokens,
+        allowedTokens:     config.allowedTokens.map((t) => t.address),
         maxDailyVolumeUsd: Number(maxDailyVolumeUsd),
         maxTradeUsd:       Number(maxTradeUsd),
         maxSlippageBps:    Number(maxSlippageBps),
@@ -205,7 +205,7 @@ export function ConnectFlow() {
   }, [address, config, maxTradeUsd, maxDailyVolumeUsd, maxSlippageBps, cooldownSec, expiresHours, signTypedData, setSession])
 
   const allApproved = config
-    ? config.allowedTokens.every((t) => approvedTokens.has(t))
+    ? config.allowedTokens.every((t) => approvedTokens.has(t.address))
     : false
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -309,8 +309,8 @@ export function ConnectFlow() {
                   ALLOWED TOKENS
                 </Label>
                 {config.allowedTokens.map((t) => (
-                  <Mono key={t} size="xs" color="secondary" as="p" style={{ margin: '2px 0' }}>
-                    {t}
+                  <Mono key={t.address} size="xs" color="secondary" as="p" style={{ margin: '2px 0' }}>
+                    {t.symbol} — {t.address}
                   </Mono>
                 ))}
               </div>
@@ -351,11 +351,11 @@ export function ConnectFlow() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
                 {config.allowedTokens.map((token) => (
                   <TokenApprovalRow
-                    key={token}
-                    token={token}
+                    key={token.address}
+                    token={token.address}
                     spender={pubkey}
                     owner={address as Hex}
-                    onDone={() => setApprovedTokens((prev) => new Set([...prev, token]))}
+                    onDone={() => setApprovedTokens((prev) => new Set([...prev, token.address]))}
                   />
                 ))}
               </div>
