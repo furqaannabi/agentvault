@@ -74,42 +74,44 @@ export function ApprovalPrompt({
     onRejected()
   }
 
+  const getStatusColor = () => {
+    if (status === 'approving') return 'var(--color-accent-teal)'
+    if (status === 'rejecting') return 'var(--color-accent-red)'
+    if (status === 'done') return 'var(--color-accent-blue)'
+    return 'var(--color-accent-amber)'
+  }
+
+  const dotColor = getStatusColor()
+
   return (
     <div style={{ padding: 'var(--space-2) var(--space-6)' }}>
-      <motion.div
-        animate={{
-          boxShadow: [
-            '0 0 0 1px var(--color-accent-amber)',
-            '0 0 0 3px var(--color-accent-amber-dim)',
-            '0 0 0 1px var(--color-accent-amber)',
-          ],
-        }}
-        transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+      <div
         style={{
-          border:          '1px solid var(--color-accent-amber)',
+          border:          '1px solid var(--color-border)',
           backgroundColor: 'var(--color-bg-surface)',
           maxWidth:        640,
         }}
       >
-        {/* Header */}
-        <div
-          style={{
-            display:         'flex',
-            alignItems:      'center',
-            justifyContent:  'space-between',
-            padding:         'var(--space-3) var(--space-4)',
-            borderBottom:    '1px solid var(--color-border)',
-            backgroundColor: 'var(--color-bg-elevated)',
-          }}
-        >
-          <Label color="primary" style={{ fontSize: 'var(--text-xs)' }}>
-            APPROVAL REQUIRED
-          </Label>
-          <Badge variant="pending" size="sm" />
-        </div>
+        <div style={{ padding: 'var(--space-5) var(--space-4)', position: 'relative' }}>
+          {/* Minimalist Status Indicator */}
+          <div style={{ position: 'absolute', top: 'var(--space-5)', right: 'var(--space-4)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+            <Label color="muted" style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase' }}>
+              {status === 'pending' ? 'APPROVAL REQUIRED' : status === 'approving' ? 'EXECUTING' : status === 'rejecting' ? 'ABORTING' : 'SETTLED'}
+            </Label>
+            <motion.div
+              animate={{ opacity: [0.3, 1, 0.3] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                backgroundColor: dotColor,
+                boxShadow: `0 0 8px ${dotColor}`,
+                flexShrink: 0,
+              }}
+            />
+          </div>
 
-        {/* Trade summary */}
-        <div style={{ padding: 'var(--space-5) var(--space-4)' }}>
           {/* Trade action — large */}
           <Heading
             size="xl"
@@ -239,7 +241,7 @@ export function ApprovalPrompt({
             </button>
           </div>
         </div>
-      </motion.div>
+      </div>
     </div>
   )
 }
