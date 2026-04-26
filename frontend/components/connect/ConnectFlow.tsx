@@ -14,7 +14,7 @@ import { useRouter } from 'next/navigation'
 import { Heading, Body, Label, Mono } from '@/components/design-system/Typography'
 import { Badge } from '@/components/design-system/Badge'
 import { useSessionStore } from '@/lib/store/sessionStore'
-import { getConfig, getPubkey, validateSession } from '@/lib/api'
+import { getConfig, validateSession } from '@/lib/api'
 import type { Config, AgentSession, SignedSession, Hex } from '@/lib/types'
 
 // ── Step indicator ─────────────────────────────────────────────────────────────
@@ -129,7 +129,6 @@ export function ConnectFlow() {
 
   const [step, setStep]         = useState<Step>(1)
   const [config, setLocalConfig] = useState<Config | null>(null)
-  const [pubkey, setPubkey]     = useState<Hex | null>(null)
   const [error, setError]       = useState<string | null>(null)
   const [busy, setBusy]         = useState(false)
 
@@ -206,10 +205,6 @@ export function ConnectFlow() {
 
       await validateSession()
       setStep(4)
-
-      // Fetch pubkey for token approval
-      const pk = await getPubkey()
-      setPubkey(pk.signer)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Signing failed.')
     } finally {
@@ -360,14 +355,14 @@ export function ConnectFlow() {
               Grant the delegate allowance to swap on your behalf. One approval per token.
             </Body>
 
-            {config && pubkey && address ? (
+            {config && address ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
                 {config.allowedTokens.map((token) => (
                   <TokenApprovalRow
                     key={token.address}
                     token={token.address}
                     symbol={token.symbol}
-                    spender={pubkey}
+                    spender={config.delegate}
                     owner={address as Hex}
                     onStatusChange={handleTokenStatus}
                   />
