@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { Syne, DM_Sans, JetBrains_Mono } from 'next/font/google'
 import { AppShell } from '@/components/layout/AppShell'
+import { Providers } from '@/components/providers/Providers'
+import '@rainbow-me/rainbowkit/styles.css'
 import './globals.css'
 
 const syne = Syne({
@@ -40,7 +42,9 @@ export default function RootLayout({
       className={`${syne.variable} ${dmSans.variable} ${jetbrainsMono.variable}`}
     >
       <body>
-        <AppShell>{children}</AppShell>
+        <Providers>
+          <AppShell>{children}</AppShell>
+        </Providers>
       </body>
     </html>
   )

@@ -1,6 +1,18 @@
-import type { Proof, StreamChunk } from './types'
+import type { Config, Proof, Portfolio, TradeProposal } from './types'
+import { useSessionStore } from './store/sessionStore'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787'
+
+// ── Error types ───────────────────────────────────────────────────────────────
+
+export class SessionExpiredError extends Error {
+  constructor(code: string) {
+    super(`Session error: ${code}`)
+    this.name = 'SessionExpiredError'
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function safeJson<T>(res: Response): Promise<T> {
   const text = await res.text()
@@ -10,84 +22,115 @@ async function safeJson<T>(res: Response): Promise<T> {
   return JSON.parse(text) as T
 }
 
-// POST /chat → SSE stream of StreamChunks
-// Yields text deltas, then a proposal chunk, then optionally proof_ready
-export async function* streamChat(
-  message: string,
-  sessionId: string,
-): AsyncGenerator<StreamChunk> {
-  const response = await fetch(`${API_BASE}/chat`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ message, sessionId }),
+function getAuthHeader(): string {
+  const header = useSessionStore.getState().authHeader()
+  if (!header) throw new SessionExpiredError('no_session')
+  return header
+}
+
+async function authedFetch(
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const auth = getAuthHeader()
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization:  auth,
+      ...init.headers,
+    },
   })
 
-  if (!response.ok) {
-    throw new Error(`Chat request failed: ${response.status}`)
-  }
-
-  const reader = response.body?.getReader()
-  if (!reader) throw new Error('No response body')
-
-  const decoder = new TextDecoder()
-  let buffer = ''
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() ?? ''
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue
-        const data = line.slice(6).trim()
-        if (data === '[DONE]') return
-        try {
-          yield JSON.parse(data) as StreamChunk
-        } catch {
-          // skip malformed SSE chunks
-        }
-      }
+  if (res.status === 401) {
+    const body = await res.json().catch(() => ({}))
+    const code  = body?.code ?? 'expired'
+    // Clear session on expiry/revocation so guard redirects to /connect
+    if (['expired', 'revoked', 'missing_or_malformed_session'].includes(code)) {
+      useSessionStore.getState().clearSession()
     }
-  } finally {
-    reader.cancel()
+    throw new SessionExpiredError(code)
+  }
+
+  return res
+}
+
+// ── Public endpoints (no auth) ────────────────────────────────────────────────
+
+export async function getConfig(): Promise<Config> {
+  const res = await fetch(`${API_BASE}/config`)
+  if (!res.ok) throw new Error(`GET /config failed: ${res.status}`)
+  return safeJson<Config>(res)
+}
+
+export async function getPubkey(): Promise<{ signer: `0x${string}` }> {
+  const res = await fetch(`${API_BASE}/pubkey`)
+  if (!res.ok) throw new Error(`GET /pubkey failed: ${res.status}`)
+  return safeJson<{ signer: `0x${string}` }>(res)
+}
+
+export async function checkHealth(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/health`)
+    return res.ok
+  } catch {
+    return false
   }
 }
 
-// POST /approve → triggers policy engine + swap + proof assembly
-// Returns the assembled Proof
+// ── Session endpoints ─────────────────────────────────────────────────────────
+
+export async function validateSession(): Promise<{
+  ok: boolean
+  user: string
+  delegate: string
+  expiresAt: number
+  nonce: string
+}> {
+  const res = await authedFetch('/session/validate', { method: 'POST' })
+  if (!res.ok) throw new Error(`POST /session/validate failed: ${res.status}`)
+  return safeJson(res)
+}
+
+export async function deleteSession(): Promise<void> {
+  try {
+    await authedFetch('/session', { method: 'DELETE' })
+  } catch {
+    // Best-effort — clear local state regardless
+  }
+  useSessionStore.getState().clearSession()
+}
+
+// ── Authenticated endpoints ───────────────────────────────────────────────────
+
+export async function getPortfolio(): Promise<Portfolio> {
+  const res = await authedFetch('/portfolio')
+  if (!res.ok) throw new Error(`GET /portfolio failed: ${res.status}`)
+  return safeJson<Portfolio>(res)
+}
+
+export async function postChat(msg: string): Promise<TradeProposal> {
+  const res = await authedFetch('/chat', {
+    method: 'POST',
+    body:   JSON.stringify({ msg }),
+  })
+  if (!res.ok) throw new Error(`POST /chat failed: ${res.status}`)
+  const data = await safeJson<{ proposal: TradeProposal }>(res)
+  return data.proposal
+}
+
 export async function approveProposal(proposalId: string): Promise<Proof> {
-  const response = await fetch(`${API_BASE}/approve`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ proposalId }),
+  const res = await authedFetch('/approve', {
+    method: 'POST',
+    body:   JSON.stringify({ proposalId }),
   })
-  if (!response.ok) throw new Error(`Approve failed: ${response.status}`)
-  return safeJson<Proof>(response)
+  if (!res.ok) throw new Error(`POST /approve failed: ${res.status}`)
+  const data = await safeJson<{ proof: Proof }>(res)
+  return data.proof
 }
 
-// POST /approve with reject flag — signals user rejected the trade
-export async function rejectProposal(proposalId: string): Promise<void> {
-  await fetch(`${API_BASE}/approve`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ proposalId, rejected: true }),
-  })
-}
-
-// GET /proof/:id → single Proof object
 export async function getProof(id: string): Promise<Proof> {
-  const response = await fetch(`${API_BASE}/proof/${id}`)
-  if (!response.ok) throw new Error(`Failed to fetch proof: ${response.status}`)
-  return safeJson<Proof>(response)
-}
-
-// GET /proof → list of all Proofs (for ProofIndex)
-export async function getProofs(): Promise<Proof[]> {
-  const response = await fetch(`${API_BASE}/proof`)
-  if (!response.ok) throw new Error(`Failed to fetch proofs: ${response.status}`)
-  return safeJson<Proof[]>(response)
+  const res = await authedFetch(`/proof/${id}`)
+  if (!res.ok) throw new Error(`GET /proof/${id} failed: ${res.status}`)
+  return safeJson<Proof>(res)
 }
