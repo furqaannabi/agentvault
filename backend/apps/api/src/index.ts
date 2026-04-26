@@ -11,8 +11,11 @@ import { buildDeps } from './deps.js';
 import { createSessionStore } from './middleware/session.js';
 import { approveRoute } from './routes/approve.js';
 import { chatRoute } from './routes/chat.js';
+import { configRoute, parseAllowedTokens } from './routes/config.js';
+import { portfolioRoute } from './routes/portfolio.js';
 import { proofRoute } from './routes/proof.js';
 import { pubkeyRoute } from './routes/pubkey.js';
+import { sessionRoute } from './routes/session.js';
 
 // Resolve backend/.env regardless of cwd (apps/api vs backend root)
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -35,7 +38,16 @@ app.get('/', (c) =>
   c.json({
     name: 'agentvault-api',
     version: '0.1.0',
-    routes: ['/chat (POST)', '/approve (POST)', '/proof/:id (GET)', '/pubkey (GET)'],
+    routes: [
+      '/chat (POST)',
+      '/approve (POST)',
+      '/proof/:id (GET)',
+      '/pubkey (GET)',
+      '/config (GET)',
+      '/portfolio (GET)',
+      '/session/validate (POST)',
+      '/session (DELETE)',
+    ],
   }),
 );
 
@@ -50,19 +62,30 @@ const delegateAddr = (process.env.SEPOLIA_SIGNER_ADDR ??
 if (!delegateAddr) {
   throw new Error('SEPOLIA_PRIVATE_KEY or SEPOLIA_SIGNER_ADDR required for session middleware');
 }
-const sessions = createSessionStore({
-  delegate: delegateAddr,
-  chainId: Number(process.env.EXEC_CHAIN_ID ?? 84532),
-});
+const chainId = Number(process.env.EXEC_CHAIN_ID ?? 84532);
+const sessions = createSessionStore({ delegate: delegateAddr, chainId });
+const allowedTokens = parseAllowedTokens(process.env.ALLOWED_TOKENS);
 
 app.use('/chat', sessions.middleware);
 app.use('/approve', sessions.middleware);
 app.use('/proof/*', sessions.middleware);
+app.use('/portfolio', sessions.middleware);
+app.use('/session', sessions.middleware);
+app.use('/session/*', sessions.middleware);
 
+app.route('/', configRoute({ delegate: delegateAddr, chainId, allowedTokens }));
+app.route('/', sessionRoute(sessions));
 app.route('/', chatRoute(deps));
 app.route('/', approveRoute(deps));
 app.route('/', proofRoute(deps));
 app.route('/', pubkeyRoute(deps));
+
+if (process.env.SEPOLIA_RPC_URL) {
+  const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
+  app.route('/', portfolioRoute({ provider, knownTokens: allowedTokens }));
+} else {
+  console.warn('[api] SEPOLIA_RPC_URL missing — /portfolio disabled');
+}
 
 const port = Number(process.env.PORT ?? 8787);
 serve({ fetch: app.fetch, port }, (info) => {

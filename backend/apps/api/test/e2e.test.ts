@@ -8,7 +8,9 @@ import { describe, expect, it } from 'vitest';
 import { createSessionStore } from '../src/middleware/session.js';
 import { approveRoute } from '../src/routes/approve.js';
 import { chatRoute } from '../src/routes/chat.js';
+import { configRoute } from '../src/routes/config.js';
 import { proofRoute } from '../src/routes/proof.js';
+import { sessionRoute } from '../src/routes/session.js';
 import {
   TEST_CHAIN_ID,
   fakeAnchorClient,
@@ -57,6 +59,10 @@ function buildTestApp(opts?: { proposalJson?: string; sanityJson?: string }) {
   app.use('/chat', sessions.middleware);
   app.use('/approve', sessions.middleware);
   app.use('/proof/*', sessions.middleware);
+  app.use('/session', sessions.middleware);
+  app.use('/session/*', sessions.middleware);
+  app.route('/', configRoute({ delegate: testDelegateAddr(), chainId: TEST_CHAIN_ID, allowedTokens: [] }));
+  app.route('/', sessionRoute(sessions));
   app.route('/', chatRoute(deps));
   app.route('/', approveRoute(deps));
   app.route('/', proofRoute(deps));
@@ -144,6 +150,45 @@ describe('e2e: chat → approve → proof', () => {
     const r = await postJson(app, '/chat', { msg: 'hi' }, signed);
     expect(r.status).toBe(401);
     expect((r.body as { error: string }).error).toBe('expired');
+  });
+
+  it('GET /config returns EIP-712 domain + delegate', async () => {
+    const { app } = buildTestApp();
+    const r = await app.request('/config');
+    expect(r.status).toBe(200);
+    const body = (await r.json()) as {
+      delegate: string;
+      chainId: number;
+      eip712Domain: { name: string; version: string; chainId: number };
+      eip712Types: { AgentSession: unknown };
+    };
+    expect(body.delegate.toLowerCase()).toBe(testDelegateAddr().toLowerCase());
+    expect(body.chainId).toBe(TEST_CHAIN_ID);
+    expect(body.eip712Domain.name).toBe('AgentVault');
+    expect(body.eip712Types.AgentSession).toBeTruthy();
+  });
+
+  it('POST /session/validate echoes session details', async () => {
+    const { app } = buildTestApp();
+    const signed = await fakeSignedSession();
+    const r = await postJson(app, '/session/validate', {}, signed);
+    expect(r.status).toBe(200);
+    const body = r.body as { ok: boolean; user: string; expiresAt: number };
+    expect(body.ok).toBe(true);
+    expect(body.user.toLowerCase()).toBe(testUserAddr().toLowerCase());
+  });
+
+  it('DELETE /session revokes the nonce; subsequent calls 401', async () => {
+    const { app } = buildTestApp();
+    const signed = await fakeSignedSession();
+    const del = await app.request('/session', {
+      method: 'DELETE',
+      headers: { authorization: sessionHeader(signed) },
+    });
+    expect(del.status).toBe(200);
+    const after = await postJson(app, '/chat', { msg: 'hi' }, signed);
+    expect(after.status).toBe(401);
+    expect((after.body as { error: string }).error).toBe('revoked');
   });
 });
 
