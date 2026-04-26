@@ -1,10 +1,9 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import Link from 'next/link'
 import { Label, Mono, Body } from '@/components/design-system/Typography'
 import { Badge } from '@/components/design-system/Badge'
-import { getProofs } from '@/lib/api'
 import { useProofStore } from '@/lib/store/proofStore'
 import { useShallow } from 'zustand/react/shallow'
 import type { Proof } from '@/lib/types'
@@ -127,26 +126,7 @@ export function ProofIndex() {
   const storeProofs = useProofStore(
     useShallow((s) => s.proofList.map((id) => s.proofs[id]))
   )
-  const setProofs   = useProofStore((s) => s.setProofs)
-
-  const [loading, setLoading] = useState(storeProofs.length === 0)
-  const [error, setError]     = useState<string | null>(null)
-
-  useEffect(() => {
-    if (storeProofs.length > 0) return
-    let cancelled = false
-    getProofs()
-      .then((data) => {
-        if (cancelled) return
-        setProofs(data)
-      })
-      .catch((err) => {
-        if (cancelled) return
-        setError(err instanceof Error ? err.message : 'Failed to load proofs.')
-      })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // No list endpoint — proofs are cached locally after each /approve
 
   return (
     <div
@@ -169,11 +149,9 @@ export function ProofIndex() {
         <Label color="primary" style={{ fontSize: 'var(--text-xs)' }}>
           PROOF HISTORY
         </Label>
-        {!loading ? (
-          <Label color="secondary" style={{ fontSize: 'var(--text-xs)' }}>
-            {storeProofs.length} RECORD{storeProofs.length !== 1 ? 'S' : ''}
-          </Label>
-        ) : null}
+        <Label color="secondary" style={{ fontSize: 'var(--text-xs)' }}>
+          {storeProofs.length} RECORD{storeProofs.length !== 1 ? 'S' : ''}
+        </Label>
       </div>
 
       {/* Column headers */}
@@ -193,31 +171,8 @@ export function ProofIndex() {
         <span />
       </div>
 
-      {/* Loading */}
-      {loading ? (
-        <>
-          <SkeletonRow />
-          <SkeletonRow />
-          <SkeletonRow />
-        </>
-      ) : null}
-
-      {/* Error */}
-      {!loading && error ? (
-        <div
-          style={{
-            padding:         'var(--space-4)',
-            border:          'var(--border-width) solid var(--color-accent-red)',
-            backgroundColor: 'var(--color-accent-red-dim)',
-            margin:          'var(--space-4)',
-          }}
-        >
-          <Mono size="xs" color="red" as="span">{error}</Mono>
-        </div>
-      ) : null}
-
       {/* Empty */}
-      {!loading && !error && storeProofs.length === 0 ? (
+      {storeProofs.length === 0 ? (
         <div style={{ padding: 'var(--space-8) var(--space-4)', textAlign: 'center' }}>
           <Label color="muted" style={{ fontSize: 'var(--text-xs)' }}>
             NO PROOFS YET
@@ -229,7 +184,7 @@ export function ProofIndex() {
       ) : null}
 
       {/* Populated */}
-      {!loading && !error && storeProofs.length > 0 ? (
+      {storeProofs.length > 0 ? (
         <div>
           {storeProofs.map((proof) => (
             <ProofRow key={proof.proposalId} proof={proof} />

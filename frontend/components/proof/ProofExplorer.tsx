@@ -12,8 +12,13 @@ import type { Proof, ProofStep } from '@/lib/types'
 
 // ── Proof → ProofSteps mapping ─────────────────────────────────────────────────
 
+function basescanUrl(txHash: string, chainId: number): string {
+  if (chainId === 84532) return `https://sepolia.basescan.org/tx/${txHash}`
+  return `https://etherscan.io/tx/${txHash}`
+}
+
 function proofToSteps(proof: Proof): ProofStep[] {
-  const passCount = proof.verdict.rules.filter((r) => r.ok).length
+  const passCount = proof.verdict.rules.filter((r) => r.pass).length
   const total     = proof.verdict.rules.length
 
   return [
@@ -25,43 +30,45 @@ function proofToSteps(proof: Proof): ProofStep[] {
       detail: proof.proposal.reasoning,
     },
     {
-      index:      1,
-      label:      'OG_COMPUTE_ATTESTATION',
-      hash:       proof.verdict.teemlAttestation,
-      status:     'verified',
-      verifierUrl: `https://0gscan.io/tx/${proof.verdict.teemlAttestation}`,
-      detail:     'TeeML sealed inference attestation from 0G Compute node. Reasoning was executed inside a trusted execution environment.',
+      index:       1,
+      label:       'OG_COMPUTE_ATTESTATION',
+      hash:        proof.verdict.sig,
+      signer:      proof.verdict.signer,
+      status:      'verified' as const,
+      verifierUrl: `https://chainscan-galileo.0g.ai/tx/${proof.verdict.sig}`,
+      detail:      'TeeML sealed inference attestation from 0G Compute node.',
     },
     {
       index:  2,
       label:  'POLICY_VERDICT',
       hash:   proof.verdict.sig,
-      status: proof.verdict.ok ? 'verified' : 'failed',
-      detail: `${passCount}/${total} deterministic rules passed. ${proof.verdict.ok ? 'Trade cleared for execution.' : 'Trade blocked by policy engine.'}`,
+      signer: proof.verdict.signer,
+      status: proof.verdict.ok ? 'verified' as const : 'failed' as const,
+      detail: `${passCount}/${total} rules passed. ${proof.verdict.ok ? 'Trade cleared.' : 'Trade blocked.'}`,
     },
     {
-      index:      3,
-      label:      'UNISWAP_EXECUTION',
-      hash:       proof.exec.txHash,
-      status:     proof.exec.status === 'success' ? 'verified' : 'failed',
-      verifierUrl: `https://sepolia.etherscan.io/tx/${proof.exec.txHash}`,
-      detail:     `Settled at block ${proof.exec.blockNumber}. Received ${proof.exec.amountOut}. Gas used: ${proof.exec.gasUsed}.`,
+      index:       3,
+      label:       'SWAP_EXECUTION',
+      hash:        proof.exec.txHash,
+      status:      proof.exec.status === 'success' ? 'verified' : 'failed',
+      verifierUrl: basescanUrl(proof.exec.txHash, proof.exec.chainId),
+      detail:      `Block ${proof.exec.blockNumber} · Received ${proof.exec.amountOut} · Gas ${proof.exec.gasUsed}`,
     },
     {
-      index:      4,
-      label:      'ON_CHAIN_ANCHOR',
-      hash:       proof.anchorTx,
-      status:     'verified',
-      verifierUrl: `https://0gscan.io/tx/${proof.anchorTx}`,
-      detail:     'Merkle root of the full proof chain anchored to 0G Chain via ProofAnchor.sol.',
+      index:       4,
+      label:       'ON_CHAIN_ANCHOR',
+      hash:        proof.anchorTx,
+      status:      'verified',
+      verifierUrl: `https://chainscan-galileo.0g.ai/tx/${proof.anchorTx}`,
+      detail:      `Merkle root anchored on 0G Chain (chainId ${proof.anchorChainId}).`,
     },
     {
-      index:      5,
-      label:      'STORAGE_LOG',
-      hash:       proof.logCid,
-      status:     'verified',
+      index:       5,
+      label:       'STORAGE_LOG',
+      hash:        proof.logCid,
+      status:      'verified',
       verifierUrl: `https://storagescan.0g.ai/object/${proof.logCid}`,
-      detail:     'Immutable decision record appended to 0G Storage Log stream. Tamper-evident and permanently retrievable.',
+      detail:      'Immutable decision record in 0G Storage Log.',
     },
   ]
 }
@@ -299,6 +306,54 @@ export function ProofExplorer({ proofId }: ProofExplorerProps) {
 
       {/* Attestation ledger */}
       <ProofChain steps={steps} />
+
+      {/* Session proof */}
+      <div style={{
+        border:          'var(--border-width) solid var(--color-border)',
+        backgroundColor: 'var(--color-bg-surface)',
+      }}>
+        <div style={{
+          padding:         'var(--space-3) var(--space-4)',
+          borderBottom:    'var(--border-width) solid var(--color-border)',
+          backgroundColor: 'var(--color-bg-elevated)',
+        }}>
+          <Label color="primary" style={{ fontSize: 'var(--text-xs)' }}>SESSION PROOF</Label>
+        </div>
+        <div style={{ padding: 'var(--space-3) var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+            <Label color="secondary" style={{ fontSize: 'var(--text-xs)', width: 120, flexShrink: 0 }}>USER ADDR</Label>
+            <HashDisplay hash={proof.userAddr} prefixChars={8} suffixChars={8} showCopy />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+            <Label color="secondary" style={{ fontSize: 'var(--text-xs)', width: 120, flexShrink: 0 }}>SESSION HASH</Label>
+            <HashDisplay hash={proof.sessionHash} prefixChars={8} suffixChars={8} showCopy />
+          </div>
+        </div>
+      </div>
+
+      {/* Session proof */}
+      <div style={{
+        border:          'var(--border-width) solid var(--color-border)',
+        backgroundColor: 'var(--color-bg-surface)',
+      }}>
+        <div style={{
+          padding:         'var(--space-3) var(--space-4)',
+          borderBottom:    'var(--border-width) solid var(--color-border)',
+          backgroundColor: 'var(--color-bg-elevated)',
+        }}>
+          <Label color="primary" style={{ fontSize: 'var(--text-xs)' }}>SESSION PROOF</Label>
+        </div>
+        <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+            <Label color="muted" style={{ fontSize: 'var(--text-xs)', width: 110, flexShrink: 0 }}>USER ADDR</Label>
+            <HashDisplay hash={proof.userAddr} prefixChars={8} suffixChars={8} showCopy />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+            <Label color="muted" style={{ fontSize: 'var(--text-xs)', width: 110, flexShrink: 0 }}>SESSION HASH</Label>
+            <HashDisplay hash={proof.sessionHash} prefixChars={8} suffixChars={8} showCopy />
+          </div>
+        </div>
+      </div>
 
       {/* Root hash */}
       <RootHashFooter rootHash={proof.rootHash} />

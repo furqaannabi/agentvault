@@ -6,6 +6,8 @@ import { usePathname, useRouter } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Label, Mono } from '@/components/design-system/Typography'
 import { useChatStore } from '@/lib/store/chatStore'
+import { useSessionStore } from '@/lib/store/sessionStore'
+import { deleteSession } from '@/lib/api'
 
 // ── Drawer context ─────────────────────────────────────────────────────────────
 
@@ -60,6 +62,16 @@ function IconPolicy() {
   )
 }
 
+function IconPortfolio() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+      <rect x="1" y="4" width="11" height="8" stroke="currentColor" strokeWidth="1.5" fill="none" />
+      <path d="M4 4V3C4 2 4.5 1 6.5 1C8.5 1 9 2 9 3V4" stroke="currentColor" strokeWidth="1.5" fill="none" />
+      <line x1="1" y1="7" x2="12" y2="7" stroke="currentColor" strokeWidth="1" />
+    </svg>
+  )
+}
+
 function IconProof() {
   return (
     <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
@@ -74,10 +86,11 @@ function IconProof() {
 // ── Nav config ─────────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
-  { label: 'DECISION LOG',     href: '/',       phase: 1, icon: <IconLog />    },
-  { label: 'SPECIALIST SWARM', href: '/swarm',  phase: 2, icon: <IconSwarm />  },
-  { label: 'POLICY ENGINE',    href: '/policy', phase: 2, icon: <IconPolicy /> },
-  { label: 'PROOF EXPLORER',   href: '/proof',  phase: 1, icon: <IconProof />  },
+  { label: 'DECISION LOG',     href: '/',           phase: 1, icon: <IconLog />       },
+  { label: 'PORTFOLIO',        href: '/portfolio',  phase: 1, icon: <IconPortfolio /> },
+  { label: 'SPECIALIST SWARM', href: '/swarm',      phase: 2, icon: <IconSwarm />     },
+  { label: 'POLICY ENGINE',    href: '/policy',     phase: 2, icon: <IconPolicy />    },
+  { label: 'PROOF EXPLORER',   href: '/proof',      phase: 1, icon: <IconProof />     },
 ] as const
 
 const BOTTOM_ITEMS = [
@@ -107,6 +120,19 @@ function SidebarInner() {
   const isStreaming      = useChatStore((s) => s.isStreaming)
   const createSession    = useChatStore((s) => s.createSession)
   const setActiveSession = useChatStore((s) => s.setActiveSession)
+  const signedSession    = useSessionStore((s) => s.signedSession)
+
+  // Auth guard — redirect to /connect if no session
+  React.useEffect(() => {
+    if (!signedSession && pathname !== '/connect') {
+      router.push('/connect')
+    }
+  }, [signedSession, pathname, router])
+
+  async function handleDisconnect() {
+    await deleteSession()
+    router.push('/connect')
+  }
 
   function goToChat(sessionId?: string) {
     if (sessionId) setActiveSession(sessionId)
@@ -290,8 +316,8 @@ function SidebarInner() {
 
       {/* Bottom nav */}
       <nav style={{
-        padding:   'var(--space-2) 0',
-        borderTop: 'var(--border-width) solid var(--color-border)',
+        padding:    'var(--space-2) 0',
+        borderTop:  'var(--border-width) solid var(--color-border)',
         flexShrink: 0,
       }} aria-label="Secondary">
         {BOTTOM_ITEMS.map((item) => (
@@ -309,6 +335,24 @@ function SidebarInner() {
             </Label>
           </Link>
         ))}
+        <button
+          onClick={handleDisconnect}
+          style={{
+            display:      'flex',
+            width:        '100%',
+            padding:      'var(--space-2) var(--space-4)',
+            background:   'none',
+            border:       'none',
+            cursor:       'pointer',
+            textAlign:    'left',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-accent-red)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = '' }}
+        >
+          <Label color="muted" style={{ fontSize: 'var(--text-xs)', color: 'inherit' }}>
+            DISCONNECT
+          </Label>
+        </button>
       </nav>
     </aside>
   )

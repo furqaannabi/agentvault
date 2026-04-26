@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Heading, Body, Label, Mono } from '@/components/design-system/Typography'
 import { Badge } from '@/components/design-system/Badge'
-import { approveProposal, rejectProposal } from '@/lib/api'
+import { approveProposal } from '@/lib/api'
 import type { TradeProposal, Proof } from '@/lib/types'
 
 interface ApprovalPromptProps {
@@ -45,16 +45,8 @@ export function ApprovalPrompt({
 
   function handleReject() {
     if (busy) return
-    setStatus('rejecting')
-    rejectProposal(proposal.id)
-      .then(() => {
-        setStatus('done')
-        onRejected()
-      })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : 'Rejection failed.')
-        setStatus('pending')
-      })
+    setStatus('done')
+    onRejected()
   }
 
   return (

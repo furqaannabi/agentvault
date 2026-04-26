@@ -68,7 +68,7 @@ function TokenApprovalRow({ token, spender, owner, onDone }: TokenRowProps) {
     }
   }, [isSuccess, refetch, onDone])
 
-  const approved = allowance !== undefined && allowance >= maxUint256 / 2n
+  const approved = allowance !== undefined && allowance >= maxUint256 / BigInt(2)
   const shortAddr = `${token.slice(0, 6)}…${token.slice(-4)}`
 
   return (
@@ -182,7 +182,7 @@ export function ConnectFlow() {
             domain:      config.eip712Domain as Parameters<typeof signTypedData>[0]['domain'],
             types:       config.eip712Types  as Parameters<typeof signTypedData>[0]['types'],
             primaryType: 'AgentSession',
-            message:     session as Record<string, unknown>,
+            message:     session as unknown as Record<string, unknown>,
           },
           { onSuccess: resolve, onError: reject },
         )

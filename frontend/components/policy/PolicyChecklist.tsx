@@ -48,27 +48,27 @@ function RuleRow({ rule, index }: RuleRowProps) {
             flexShrink: 0,
             fontFamily: 'var(--font-mono)',
             fontSize:   'var(--text-sm)',
-            color:      rule.ok
+            color:      rule.pass
               ? 'var(--color-accent-teal)'
               : 'var(--color-accent-red)',
             lineHeight: 1,
           }}
         >
-          {rule.ok ? '✓' : '✗'}
+          {rule.pass ? '✓' : '✗'}
         </span>
 
         {/* Rule name */}
         <Mono
           size="sm"
-          color={rule.ok ? 'primary' : 'red'}
+          color={rule.pass ? 'primary' : 'red'}
           as="span"
           style={{ flex: 1, textTransform: 'uppercase' }}
         >
-          {rule.name}
+          {rule.id}
         </Mono>
 
         {/* Badge */}
-        <Badge variant={rule.ok ? 'pass' : 'fail'} size="sm" />
+        <Badge variant={rule.pass ? 'pass' : 'fail'} size="sm" />
 
         {/* Expand toggle */}
         {hasDetail && (
@@ -104,7 +104,7 @@ interface PolicyChecklistProps {
 }
 
 export function PolicyChecklist({ verdict }: PolicyChecklistProps) {
-  const passCount = verdict.rules.filter((r) => r.ok).length
+  const passCount = verdict.rules.filter((r) => r.pass).length
   const total     = verdict.rules.length
 
   return (
@@ -139,7 +139,7 @@ export function PolicyChecklist({ verdict }: PolicyChecklistProps) {
       {/* Rule rows */}
       <div>
         {verdict.rules.map((rule, i) => (
-          <RuleRow key={rule.name} rule={rule} index={i} />
+          <RuleRow key={rule.id} rule={rule} index={i} />
         ))}
       </div>
 
@@ -156,9 +156,9 @@ export function PolicyChecklist({ verdict }: PolicyChecklistProps) {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
           <Label color="muted" style={{ fontSize: 'var(--text-xs)', width: 100, flexShrink: 0 }}>
-            ATTESTATION
+            SIGNER
           </Label>
-          <HashDisplay hash={verdict.teemlAttestation} prefixChars={6} suffixChars={6} />
+          <HashDisplay hash={verdict.signer} prefixChars={6} suffixChars={6} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
           <Label color="muted" style={{ fontSize: 'var(--text-xs)', width: 100, flexShrink: 0 }}>
