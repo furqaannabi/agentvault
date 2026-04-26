@@ -12,8 +12,8 @@ import type { Proof, ProofStep } from '@/lib/types'
 
 // ── Proof → ProofSteps mapping ─────────────────────────────────────────────────
 
-function basescanUrl(txHash: string, chainId: number): string {
-  if (chainId === 84532) return `https://sepolia.basescan.org/tx/${txHash}`
+function explorerUrl(txHash: string, chainId: number): string {
+  if (chainId === 11155111) return `https://sepolia.etherscan.io/tx/${txHash}`
   return `https://etherscan.io/tx/${txHash}`
 }
 
@@ -51,7 +51,7 @@ function proofToSteps(proof: Proof): ProofStep[] {
       label:       'SWAP_EXECUTION',
       hash:        proof.exec.txHash,
       status:      proof.exec.status === 'success' ? 'verified' : 'failed',
-      verifierUrl: basescanUrl(proof.exec.txHash, proof.exec.chainId),
+      verifierUrl: explorerUrl(proof.exec.txHash, proof.exec.chainId),
       detail:      `Block ${proof.exec.blockNumber} · Received ${proof.exec.amountOut} · Gas ${proof.exec.gasUsed}`,
     },
     {

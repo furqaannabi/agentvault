@@ -108,7 +108,7 @@ export function ApprovalPrompt({
               Max slippage: {formatSlippage(proposal.maxSlippageBps)}
             </Mono>
             <Mono size="xs" color="muted" as="span">
-              Sepolia
+              Ethereum Sepolia
             </Mono>
             <Mono size="xs" color="muted" as="span">
               {new Date(proposal.createdAt).toLocaleTimeString('en-US', {

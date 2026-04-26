@@ -1,11 +1,11 @@
 import { getDefaultConfig } from '@rainbow-me/rainbowkit'
-import { baseSepolia } from 'wagmi/chains'
+import { sepolia } from 'wagmi/chains'
 
 export const wagmiConfig = getDefaultConfig({
   appName:   'AgentVault — ProofTwin',
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? 'agentvault-dev',
-  chains:    [baseSepolia],
+  chains:    [sepolia],
   ssr:       true,
 })
 
-export { baseSepolia }
+export { sepolia }

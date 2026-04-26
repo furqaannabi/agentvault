@@ -258,7 +258,7 @@ export function ConnectFlow() {
               STEP 1 — CONNECT WALLET
             </Label>
             <Body size="sm" color="secondary">
-              Connect a wallet holding USDC on Base Sepolia.
+              Connect a wallet holding USDC on Ethereum Sepolia.
             </Body>
             <ConnectButton />
           </div>
