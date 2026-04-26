@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="15 15 70 70">
+  <!-- Isometric Vault -->
+  <path d="M50 22 L78 37 L78 63 L50 78 L22 63 L22 37 Z" fill="none" stroke="#ffffff" stroke-width="8" stroke-linejoin="round" />
+  
+  <!-- Vault lines -->
+  <path d="M50 22 L50 50 L78 37" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M50 50 L22 37" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M50 50 L50 78" fill="none" stroke="#ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+  
+  <!-- Center Core -->
+  <circle cx="50" cy="50" r="10" fill="#ffffff" />
+</svg>
