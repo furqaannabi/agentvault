@@ -88,7 +88,7 @@ function TokenApprovalRow({ token, symbol, spender, owner, onStatusChange }: Tok
         {shortAddr} ({symbol})
       </Mono>
       {approved ? (
-        <Badge variant="verified" size="sm" dot />
+        <Badge variant="pass" label="APPROVED" size="sm" dot />
       ) : (
         <button
           onClick={() => writeContract({
