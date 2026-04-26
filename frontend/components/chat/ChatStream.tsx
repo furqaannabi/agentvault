@@ -11,6 +11,7 @@ import React, {
 import { MessageBubble } from '@/components/chat/MessageBubble'
 import { Label, Mono } from '@/components/design-system/Typography'
 import { useChatStore, selectMessages } from '@/lib/store/chatStore'
+import { useShallow } from 'zustand/react/shallow'
 import { postChat } from '@/lib/api'
 import type { TradeProposal } from '@/lib/types'
 
@@ -32,7 +33,7 @@ interface ChatStreamProps {
 
 export const ChatStream = forwardRef<ChatStreamHandle, ChatStreamProps>(
   function ChatStream({ sessionId: _sessionId, onProposalReceived }, ref) {
-    const messages           = useChatStore(selectMessages)
+    const messages           = useChatStore(useShallow(selectMessages))
     const isStreaming        = useChatStore((s) => s.isStreaming)
     const addMessage         = useChatStore((s) => s.addMessage)
     const updateLastMessage  = useChatStore((s) => s.updateLastMessage)
