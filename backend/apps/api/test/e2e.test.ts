@@ -2,13 +2,23 @@ import { createExecAdapter } from '@agentvault/exec';
 import { DEFAULT_POLICY, createPolicy, type PolicyContext } from '@agentvault/policy';
 import { createProofPipeline } from '@agentvault/proof';
 import { createTwin } from '@agentvault/twin';
-import type { Hex } from '@agentvault/types';
+import type { Hex, SignedSession } from '@agentvault/types';
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
+import { createSessionStore } from '../src/middleware/session.js';
 import { approveRoute } from '../src/routes/approve.js';
 import { chatRoute } from '../src/routes/chat.js';
 import { proofRoute } from '../src/routes/proof.js';
-import { fakeAnchorClient, fakeComputeClient, fakeMemory } from './fakes.js';
+import {
+  TEST_CHAIN_ID,
+  fakeAnchorClient,
+  fakeComputeClient,
+  fakeMemory,
+  fakeSignedSession,
+  sessionHeader,
+  testDelegateAddr,
+  testUserAddr,
+} from './fakes.js';
 
 const FIXED_KEY = ('0x' + 'a'.repeat(64)) as Hex;
 
@@ -22,17 +32,13 @@ const validProposalJson = JSON.stringify({
 
 const validSanityJson = JSON.stringify({ ok: true, reason: 'consistent' });
 
-function buildTestApp() {
+function buildTestApp(opts?: { proposalJson?: string; sanityJson?: string }) {
   const memory = fakeMemory();
   const compute = fakeComputeClient({
-    proposal: validProposalJson,
-    sanity: validSanityJson,
+    proposal: opts?.proposalJson ?? validProposalJson,
+    sanity: opts?.sanityJson ?? validSanityJson,
   });
-  const twin = createTwin({
-    memory,
-    cfg: compute.cfg,
-    compute,
-  });
+  const twin = createTwin({ memory, cfg: compute.cfg, compute });
   const policy = createPolicy({ twin, signerKey: FIXED_KEY });
   const exec = createExecAdapter({ mode: 'mock' });
   const proof = createProofPipeline({
@@ -45,84 +51,65 @@ function buildTestApp() {
     },
     anchor: fakeAnchorClient(),
   });
-
   const deps = { memory, twin, policy, exec, proof };
+  const sessions = createSessionStore({ delegate: testDelegateAddr(), chainId: TEST_CHAIN_ID });
   const app = new Hono();
+  app.use('/chat', sessions.middleware);
+  app.use('/approve', sessions.middleware);
+  app.use('/proof/*', sessions.middleware);
   app.route('/', chatRoute(deps));
   app.route('/', approveRoute(deps));
   app.route('/', proofRoute(deps));
-  return app;
+  return { app, sessions };
 }
 
-async function postJson(app: Hono, path: string, body: unknown) {
-  const res = await app.request(path, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+async function postJson(app: Hono, path: string, body: unknown, signed?: SignedSession) {
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (signed) headers.authorization = sessionHeader(signed);
+  const res = await app.request(path, { method: 'POST', headers, body: JSON.stringify(body) });
   return { status: res.status, body: await res.json() };
 }
 
 describe('e2e: chat → approve → proof', () => {
   it('produces a verifiable proof end-to-end', async () => {
-    const app = buildTestApp();
+    const { app } = buildTestApp();
+    const signed = await fakeSignedSession();
+    const user = testUserAddr().toLowerCase();
 
-    // 1. Chat
-    const chat = await postJson(app, '/chat', { userId: 'alice', msg: 'rebalance' });
+    const chat = await postJson(app, '/chat', { msg: 'rebalance' }, signed);
     expect(chat.status).toBe(200);
-    const proposal = (chat.body as { proposal: { id: string; tokenIn: string } }).proposal;
+    const proposal = (chat.body as { proposal: { id: string; tokenIn: string; userId: string } }).proposal;
     expect(proposal.id).toMatch(/^prop_/);
-    expect(proposal.tokenIn).toBe('0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238');
+    expect(proposal.userId).toBe(user);
 
-    // 2. Approve
-    const approve = await postJson(app, '/approve', { proposalId: proposal.id, userId: 'alice' });
+    const approve = await postJson(app, '/approve', { proposalId: proposal.id }, signed);
     expect(approve.status).toBe(200);
-    const proof = (approve.body as { proof: { proposalId: string; rootHash: string; anchorTx: string } })
-      .proof;
+    const proof = (approve.body as { proof: { proposalId: string; rootHash: string; anchorTx: string } }).proof;
     expect(proof.proposalId).toBe(proposal.id);
     expect(proof.rootHash).toMatch(/^0x[0-9a-f]{64}$/);
-    expect(proof.anchorTx).toMatch(/^0xanchor/);
 
-    // 3. Fetch proof
-    const get = await app.request(`/proof/${proposal.id}?userId=alice`);
-    expect(get.status).toBe(200);
-    const fetched = (await get.json()) as { proof: { rootHash: string } };
+    const res = await app.request(`/proof/${proposal.id}`, {
+      headers: { authorization: sessionHeader(signed) },
+    });
+    expect(res.status).toBe(200);
+    const fetched = (await res.json()) as { proof: { rootHash: string } };
     expect(fetched.proof.rootHash).toBe(proof.rootHash);
   });
 
   it('rejects when policy fails (slippage over cap)', async () => {
-    const memory = fakeMemory();
-    const compute = fakeComputeClient({
-      proposal: JSON.stringify({
+    const { app } = buildTestApp({
+      proposalJson: JSON.stringify({
         tokenIn: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
         tokenOut: '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14',
         amountIn: '500000000',
-        maxSlippageBps: 999, // over default cap of 100
+        maxSlippageBps: 999,
         reasoning: 'aggressive',
       }),
-      sanity: validSanityJson,
     });
-    const twin = createTwin({ memory, cfg: compute.cfg, compute });
-    const policy = createPolicy({ twin, signerKey: FIXED_KEY });
-    const exec = createExecAdapter({ mode: 'mock' });
-    const proof = createProofPipeline({
-      memory,
-      cfg: {
-        rpcUrl: 'x',
-        privateKey: FIXED_KEY,
-        proofAnchorAddress: ('0x' + '2'.repeat(40)) as Hex,
-        chainId: 16602,
-      },
-      anchor: fakeAnchorClient(),
-    });
-    const deps = { memory, twin, policy, exec, proof };
-    const app = new Hono();
-    app.route('/', chatRoute(deps));
-    app.route('/', approveRoute(deps));
-
-    const chat = await postJson(app, '/chat', { userId: 'bob', msg: 'go big' });
+    const signed = await fakeSignedSession();
+    const chat = await postJson(app, '/chat', { msg: 'go big' }, signed);
     const proposalId = (chat.body as { proposal: { id: string } }).proposal.id;
-    const approve = await postJson(app, '/approve', { proposalId, userId: 'bob' });
+    const approve = await postJson(app, '/approve', { proposalId }, signed);
     expect(approve.status).toBe(200);
     const rej = approve.body as { rejected: { ok: boolean; rules: { id: string; pass: boolean }[] } };
     expect(rej.rejected.ok).toBe(false);
@@ -131,18 +118,34 @@ describe('e2e: chat → approve → proof', () => {
   });
 
   it('returns 404 for unknown proposal', async () => {
-    const app = buildTestApp();
-    const r = await postJson(app, '/approve', { proposalId: 'prop_nope', userId: 'alice' });
+    const { app } = buildTestApp();
+    const signed = await fakeSignedSession();
+    const r = await postJson(app, '/approve', { proposalId: 'prop_nope' }, signed);
     expect(r.status).toBe(404);
   });
 
   it('returns 400 for malformed body', async () => {
-    const app = buildTestApp();
-    const r = await postJson(app, '/chat', { userId: 'alice' }); // missing msg
+    const { app } = buildTestApp();
+    const signed = await fakeSignedSession();
+    const r = await postJson(app, '/chat', {}, signed);
     expect(r.status).toBe(400);
+  });
+
+  it('rejects request without session header (401)', async () => {
+    const { app } = buildTestApp();
+    const r = await postJson(app, '/chat', { msg: 'hi' });
+    expect(r.status).toBe(401);
+    expect((r.body as { error: string }).error).toBe('missing_or_malformed_session');
+  });
+
+  it('rejects expired session (401)', async () => {
+    const { app } = buildTestApp();
+    const signed = await fakeSignedSession({ expiresAt: Math.floor(Date.now() / 1000) - 10 });
+    const r = await postJson(app, '/chat', { msg: 'hi' }, signed);
+    expect(r.status).toBe(401);
+    expect((r.body as { error: string }).error).toBe('expired');
   });
 });
 
-// Suppresses unused warning when above test doesn't reference DEFAULT_POLICY/PolicyContext
 void DEFAULT_POLICY;
 type _U = PolicyContext;

@@ -1,11 +1,14 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
+import type { Hex } from '@agentvault/types';
 import { config as loadEnv } from 'dotenv';
+import { ethers } from 'ethers';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { buildDeps } from './deps.js';
+import { createSessionStore } from './middleware/session.js';
 import { approveRoute } from './routes/approve.js';
 import { chatRoute } from './routes/chat.js';
 import { proofRoute } from './routes/proof.js';
@@ -39,6 +42,22 @@ app.get('/', (c) =>
 app.get('/health', (c) => c.json({ ok: true }));
 
 const deps = buildDeps();
+
+const delegateAddr = (process.env.SEPOLIA_SIGNER_ADDR ??
+  (process.env.SEPOLIA_PRIVATE_KEY
+    ? new ethers.Wallet(process.env.SEPOLIA_PRIVATE_KEY).address
+    : undefined)) as Hex | undefined;
+if (!delegateAddr) {
+  throw new Error('SEPOLIA_PRIVATE_KEY or SEPOLIA_SIGNER_ADDR required for session middleware');
+}
+const sessions = createSessionStore({
+  delegate: delegateAddr,
+  chainId: Number(process.env.EXEC_CHAIN_ID ?? 84532),
+});
+
+app.use('/chat', sessions.middleware);
+app.use('/approve', sessions.middleware);
+app.use('/proof/*', sessions.middleware);
 
 app.route('/', chatRoute(deps));
 app.route('/', approveRoute(deps));
