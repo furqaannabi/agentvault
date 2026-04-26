@@ -1,8 +1,8 @@
-import { createExecAdapter } from '@agentvault/exec';
+import { type ExecAdapter, createExecAdapter } from '@agentvault/exec';
 import { DEFAULT_POLICY, createPolicy, type PolicyContext } from '@agentvault/policy';
 import { createProofPipeline } from '@agentvault/proof';
 import { createTwin } from '@agentvault/twin';
-import type { Hex, SignedSession } from '@agentvault/types';
+import type { ExecResult, ExecSwapInput, Hex, SignedSession } from '@agentvault/types';
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 import { createSessionStore } from '../src/middleware/session.js';
@@ -34,7 +34,11 @@ const validProposalJson = JSON.stringify({
 
 const validSanityJson = JSON.stringify({ ok: true, reason: 'consistent' });
 
-function buildTestApp(opts?: { proposalJson?: string; sanityJson?: string }) {
+function buildTestApp(opts?: {
+  proposalJson?: string;
+  sanityJson?: string;
+  exec?: ExecAdapter;
+}) {
   const memory = fakeMemory();
   const compute = fakeComputeClient({
     proposal: opts?.proposalJson ?? validProposalJson,
@@ -42,7 +46,7 @@ function buildTestApp(opts?: { proposalJson?: string; sanityJson?: string }) {
   });
   const twin = createTwin({ memory, cfg: compute.cfg, compute });
   const policy = createPolicy({ twin, signerKey: FIXED_KEY });
-  const exec = createExecAdapter({ mode: 'mock' });
+  const exec = opts?.exec ?? createExecAdapter({ mode: 'mock' });
   const proof = createProofPipeline({
     memory,
     cfg: {
@@ -186,6 +190,75 @@ describe('e2e: chat → approve → proof', () => {
     const body = r.body as { ok: boolean; user: string; expiresAt: number };
     expect(body.ok).toBe(true);
     expect(body.user.toLowerCase()).toBe(testUserAddr().toLowerCase());
+  });
+
+  it('session.maxTradeUsd drives maxSize policy rejection', async () => {
+    // Proposal amountIn = 500_000_000 (500 USDC base units). Session caps trade
+    // at 100 USD → 100_000_000 base units. Expect maxSize to fail.
+    const { app } = buildTestApp();
+    const signed = await fakeSignedSession({ maxTradeUsd: 100 });
+    const chat = await postJson(app, '/chat', { msg: 'rebalance' }, signed);
+    const proposalId = (chat.body as { proposal: { id: string } }).proposal.id;
+    const approve = await postJson(app, '/approve', { proposalId }, signed);
+    expect(approve.status).toBe(200);
+    const rej = approve.body as { rejected: { ok: boolean; rules: { id: string; pass: boolean }[] } };
+    expect(rej.rejected.ok).toBe(false);
+    const sz = rej.rejected.rules.find((r) => r.id === 'maxSize');
+    expect(sz?.pass).toBe(false);
+  });
+
+  it('exec.swap receives session.user (delegated execution wired end-to-end)', async () => {
+    let observed: ExecSwapInput | null = null;
+    const spyExec: ExecAdapter = {
+      async swap(input: ExecSwapInput): Promise<ExecResult> {
+        observed = input;
+        return {
+          proposalId: input.proposal.id,
+          txHash: ('0x' + 'cd'.repeat(32)) as Hex,
+          blockNumber: 1234,
+          amountOut: '999',
+          gasUsed: '21000',
+          status: 'success',
+          chainId: TEST_CHAIN_ID,
+        };
+      },
+    };
+    const { app } = buildTestApp({ exec: spyExec });
+    const signed = await fakeSignedSession();
+    const chat = await postJson(app, '/chat', { msg: 'rebalance' }, signed);
+    const proposalId = (chat.body as { proposal: { id: string } }).proposal.id;
+    const r = await postJson(app, '/approve', { proposalId }, signed);
+    expect(r.status).toBe(200);
+    expect(observed).not.toBeNull();
+    expect(observed!.user.toLowerCase()).toBe(testUserAddr().toLowerCase());
+    expect(observed!.proposal.id).toBe(proposalId);
+  });
+
+  it('exec failure (e.g. insufficient allowance) returns 502 with detail', async () => {
+    const failExec: ExecAdapter = {
+      async swap(input: ExecSwapInput): Promise<ExecResult> {
+        return {
+          proposalId: input.proposal.id,
+          txHash: ('0x' + '0'.repeat(64)) as Hex,
+          blockNumber: 0,
+          amountOut: '0',
+          gasUsed: '0',
+          status: 'failed',
+          error: `allowance 0 < amountIn ${input.proposal.amountIn}; user must re-approve token ${input.proposal.tokenIn}`,
+          chainId: TEST_CHAIN_ID,
+        };
+      },
+    };
+    const { app } = buildTestApp({ exec: failExec });
+    const signed = await fakeSignedSession();
+    const chat = await postJson(app, '/chat', { msg: 'rebalance' }, signed);
+    const proposalId = (chat.body as { proposal: { id: string } }).proposal.id;
+    const r = await postJson(app, '/approve', { proposalId }, signed);
+    expect(r.status).toBe(502);
+    const body = r.body as { error: string; exec: { error: string } };
+    expect(body.error).toBe('exec_failed');
+    expect(body.exec.error).toMatch(/allowance/);
+    expect(body.exec.error).toMatch(/re-approve/);
   });
 
   it('DELETE /session revokes the nonce; subsequent calls 401', async () => {
