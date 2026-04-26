@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useEffect } from 'react'
+import { motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { useSessionStore } from '@/lib/store/sessionStore'
-import { Label, Mono } from '@/components/design-system/Typography'
 
 interface AuthGateProps {
   children: React.ReactNode
@@ -23,14 +23,15 @@ export function AuthGate({ children }: AuthGateProps) {
   if (!hasHydrated) {
     return (
       <div style={{
-        display:        'flex',
-        flexDirection:  'column',
-        alignItems:     'center',
-        justifyContent: 'center',
-        height:         '100vh',
-        gap:            'var(--space-4)',
+        display:         'flex',
+        flexDirection:   'column',
+        alignItems:      'center',
+        justifyContent:  'center',
+        height:          '100vh',
+        gap:             'var(--space-4)',
         backgroundColor: 'var(--color-bg-base)',
       }}>
+        {/* Logo */}
         <div style={{
           fontFamily:    'var(--font-display)',
           fontWeight:    'var(--weight-bold)',
@@ -40,9 +41,32 @@ export function AuthGate({ children }: AuthGateProps) {
         }}>
           AgentVault
         </div>
-        <Label color="muted" style={{ fontSize: 'var(--text-xs)' }}>
-          [ INITIALIZING ]
-        </Label>
+
+        {/* Pulsing cursor — same as chat stream indicator */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+          <span style={{
+            fontFamily:    'var(--font-mono)',
+            fontSize:      'var(--text-xs)',
+            letterSpacing: 'var(--tracking-widest)',
+            textTransform: 'uppercase',
+            color:         'var(--color-text-muted)',
+          }}>
+            INITIALIZING
+          </span>
+          <motion.span
+            aria-hidden
+            animate={{ opacity: [1, 0, 1] }}
+            transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize:   'var(--text-base)',
+              color:      'var(--color-text-primary)',
+              lineHeight: 1,
+            }}
+          >
+            ▊
+          </motion.span>
+        </div>
       </div>
     )
   }
