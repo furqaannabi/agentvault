@@ -72,8 +72,8 @@ export const ChatStream = forwardRef<ChatStreamHandle, ChatStreamProps>(
         const response = await postChat(content)
 
         if (response.proposal) {
-          // Trade proposal — surface the approval prompt
-          updateLastMessage('Proposal ready. Review below.')
+          // Trade proposal — show reasoning, then surface the approval prompt
+          updateLastMessage(response.proposal.reasoning)
           finalizeStream()
           setPendingProposal(response.proposal)
           onProposalReceived?.(response.proposal)
