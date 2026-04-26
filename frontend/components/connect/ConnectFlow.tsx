@@ -60,9 +60,10 @@ function TokenApprovalRow({ token, symbol, spender, owner, onStatusChange }: Tok
   })
 
   const { writeContract, data: txHash, isPending } = useWriteContract()
-  const { isSuccess } = useWaitForTransactionReceipt({ hash: txHash })
+  const { isSuccess, isLoading: isConfirming } = useWaitForTransactionReceipt({ hash: txHash })
 
   const approved = allowance !== undefined && allowance >= maxUint256 / BigInt(2)
+  const waiting  = isPending || isConfirming
 
   useEffect(() => {
     if (isSuccess) refetch()
@@ -96,20 +97,20 @@ function TokenApprovalRow({ token, symbol, spender, owner, onStatusChange }: Tok
             functionName: 'approve',
             args:         [spender, maxUint256],
           })}
-          disabled={isPending}
+          disabled={waiting}
           style={{
             padding:         'var(--space-1) var(--space-3)',
-            backgroundColor: isPending ? 'transparent' : 'var(--color-text-primary)',
-            border:          'var(--border-width) solid var(--color-text-primary)',
-            color:           isPending ? 'var(--color-text-muted)' : 'var(--color-bg-base)',
+            backgroundColor: waiting ? 'transparent' : 'var(--color-text-primary)',
+            border:          `var(--border-width) solid ${isConfirming ? 'var(--color-accent-amber)' : 'var(--color-text-primary)'}`,
+            color:           waiting ? 'var(--color-accent-amber)' : 'var(--color-bg-base)',
             fontFamily:      'var(--font-mono)',
             fontSize:        'var(--text-xs)',
             letterSpacing:   'var(--tracking-wider)',
             textTransform:   'uppercase',
-            cursor:          isPending ? 'default' : 'pointer',
+            cursor:          waiting ? 'default' : 'pointer',
           }}
         >
-          {isPending ? 'APPROVING…' : 'APPROVE'}
+          {isPending ? 'CONFIRM IN WALLET…' : isConfirming ? 'CONFIRMING…' : 'APPROVE'}
         </button>
       )}
     </div>
