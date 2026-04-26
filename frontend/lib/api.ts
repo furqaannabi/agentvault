@@ -123,14 +123,26 @@ export async function postChat(msg: string): Promise<ChatApiResponse> {
   return safeJson<ChatApiResponse>(res)
 }
 
+export interface ExecFailedError {
+  error:   'exec_failed'
+  exec:    { proposalId: string; txHash: string; status: string; error: string; chainId: number }
+  verdict: { ok: boolean; rules: { id: string; pass: boolean }[] }
+}
+
 export async function approveProposal(proposalId: string): Promise<Proof> {
-  const res = await authedFetch('/approve', {
+  const res  = await authedFetch('/approve', {
     method: 'POST',
     body:   JSON.stringify({ proposalId }),
   })
+  const data = await safeJson<{ proof: Proof } | ExecFailedError>(res)
+
+  if ('error' in data && data.error === 'exec_failed') {
+    // Surface the backend exec error as a readable message
+    throw new Error(data.exec.error ?? 'Execution failed on-chain.')
+  }
+
   if (!res.ok) throw new Error(`POST /approve failed: ${res.status}`)
-  const data = await safeJson<{ proof: Proof }>(res)
-  return data.proof
+  return (data as { proof: Proof }).proof
 }
 
 export async function getProof(id: string): Promise<Proof> {

@@ -161,18 +161,36 @@ export function ApprovalPrompt({
           </div>
 
           {/* Error */}
-          {error && (
+          {error ? (
             <div
               style={{
-                padding:         'var(--space-2) var(--space-3)',
+                padding:         'var(--space-3)',
                 border:          '1px solid var(--color-accent-red)',
                 backgroundColor: 'var(--color-accent-red-dim)',
                 marginBottom:    'var(--space-4)',
+                display:         'flex',
+                flexDirection:   'column',
+                gap:             'var(--space-2)',
               }}
             >
               <Mono size="xs" color="red" as="span">{error}</Mono>
+              {error.toLowerCase().includes('allowance') || error.toLowerCase().includes('re-approve') ? (
+                <a
+                  href="/connect"
+                  style={{
+                    fontFamily:    'var(--font-mono)',
+                    fontSize:      'var(--text-xs)',
+                    letterSpacing: 'var(--tracking-wider)',
+                    textTransform: 'uppercase',
+                    color:         'var(--color-accent-amber)',
+                    textDecoration: 'none',
+                  }}
+                >
+                  → Go to token approval →
+                </a>
+              ) : null}
             </div>
-          )}
+          ) : null}
 
           {/* Actions */}
           <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
