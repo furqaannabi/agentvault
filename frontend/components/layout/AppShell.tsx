@@ -251,7 +251,7 @@ function SidebarInner() {
           }}
         >
           <span style={{ fontSize: 'var(--text-base)', lineHeight: 1, flexShrink: 0 }}>+</span>
-          <Label style={{ fontSize: 'var(--text-xs)' }}>New Chat</Label>
+          <Label style={{ fontSize: 'var(--text-xs)' }}>New Thread</Label>
         </button>
       </div>
 
@@ -260,7 +260,7 @@ function SidebarInner() {
         {sessions.length === 0 ? (
           <div style={{ padding: 'var(--space-4)', textAlign: 'center' }}>
             <Label color="muted" style={{ fontSize: 'var(--text-xs)' }}>
-              No conversations
+              No threads yet
             </Label>
           </div>
         ) : (
