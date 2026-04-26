@@ -134,15 +134,29 @@ export async function approveProposal(proposalId: string): Promise<Proof> {
     method: 'POST',
     body:   JSON.stringify({ proposalId }),
   })
-  const data = await safeJson<{ proof: Proof } | ExecFailedError>(res)
+  const data = await safeJson<Record<string, unknown>>(res)
 
-  if ('error' in data && data.error === 'exec_failed') {
-    // Surface the backend exec error as a readable message
-    throw new Error(data.exec.error ?? 'Execution failed on-chain.')
+  // Policy rejected the trade
+  if ('rejected' in data) {
+    throw new Error('Trade blocked by policy engine.')
+  }
+
+  // Execution failed on-chain
+  if (data.error === 'exec_failed') {
+    const exec = data.exec as ExecFailedError['exec']
+    throw new Error(exec?.error ?? 'Execution failed on-chain.')
+  }
+
+  // Other backend errors
+  if ('error' in data) {
+    throw new Error((data.detail as string) ?? (data.error as string) ?? 'Approval failed.')
   }
 
   if (!res.ok) throw new Error(`POST /approve failed: ${res.status}`)
-  return (data as { proof: Proof }).proof
+
+  const proof = (data as { proof: Proof }).proof
+  if (!proof) throw new Error('Server returned no proof — trade may have failed silently.')
+  return proof
 }
 
 export async function getProof(id: string): Promise<Proof> {

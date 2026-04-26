@@ -32,6 +32,10 @@ export default function HomePage() {
   }, [activeId, sessions, createSession, setActiveSession])
 
   const handleApproved = useCallback((proof: Proof) => {
+    if (!proof?.proposalId) {
+      setPending(null)
+      return
+    }
     addProof(proof)
     setPending(null)
     addMessage({
