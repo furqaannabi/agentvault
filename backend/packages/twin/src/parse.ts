@@ -1,5 +1,25 @@
 import type { Hex } from '@agentvault/types';
 
+function stripFences(s: string): string {
+  return s
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim();
+}
+
+export type Intent = 'trade' | 'chat';
+
+export function parseIntent(raw: string): Intent {
+  const cleaned = stripFences(raw);
+  try {
+    const o = JSON.parse(cleaned) as Record<string, unknown>;
+    return o.intent === 'trade' ? 'trade' : 'chat';
+  } catch {
+    return 'chat';
+  }
+}
+
 export interface ParsedProposal {
   tokenIn: Hex;
   tokenOut: Hex;
@@ -12,15 +32,6 @@ const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 
 function isAddr(s: unknown): s is Hex {
   return typeof s === 'string' && ADDR_RE.test(s);
-}
-
-function stripFences(s: string): string {
-  // Strip ```json ... ``` if model added fences despite instructions.
-  return s
-    .trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/, '')
-    .trim();
 }
 
 export function parseProposal(raw: string): ParsedProposal {

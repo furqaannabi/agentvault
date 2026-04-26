@@ -14,8 +14,11 @@ export function chatRoute(deps: AppDeps) {
     if (!parsed.success) return c.json({ error: 'bad request', detail: parsed.error.format() }, 400);
     const session = c.get('session');
     try {
-      const proposal = await deps.twin.handle(session.user.toLowerCase(), parsed.data.msg);
-      return c.json({ proposal });
+      const result = await deps.twin.handle(session.user.toLowerCase(), parsed.data.msg);
+      if ('kind' in result && result.kind === 'chat') {
+        return c.json({ reply: result.reply });
+      }
+      return c.json({ proposal: result });
     } catch (e) {
       return c.json({ error: 'twin_failed', detail: (e as Error).message }, 500);
     }
