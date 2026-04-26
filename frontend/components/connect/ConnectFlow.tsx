@@ -45,12 +45,13 @@ function StepDot({ n, current }: { n: number; current: number }) {
 
 interface TokenRowProps {
   token:    Hex
+  symbol:   string
   spender:  Hex
   owner:    Hex
-  onDone:   () => void
+  onStatusChange: (token: Hex, approved: boolean) => void
 }
 
-function TokenApprovalRow({ token, spender, owner, onDone }: TokenRowProps) {
+function TokenApprovalRow({ token, symbol, spender, owner, onStatusChange }: TokenRowProps) {
   const { data: allowance, refetch } = useReadContract({
     address:      token,
     abi:          erc20Abi,
@@ -61,14 +62,16 @@ function TokenApprovalRow({ token, spender, owner, onDone }: TokenRowProps) {
   const { writeContract, data: txHash, isPending } = useWriteContract()
   const { isSuccess } = useWaitForTransactionReceipt({ hash: txHash })
 
-  useEffect(() => {
-    if (isSuccess) {
-      refetch()
-      onDone()
-    }
-  }, [isSuccess, refetch, onDone])
-
   const approved = allowance !== undefined && allowance >= maxUint256 / BigInt(2)
+
+  useEffect(() => {
+    if (isSuccess) refetch()
+  }, [isSuccess, refetch])
+
+  useEffect(() => {
+    onStatusChange(token, approved)
+  }, [token, approved, onStatusChange])
+
   const shortAddr = `${token.slice(0, 6)}…${token.slice(-4)}`
 
   return (
@@ -81,7 +84,7 @@ function TokenApprovalRow({ token, spender, owner, onDone }: TokenRowProps) {
       backgroundColor: 'var(--color-bg-elevated)',
     }}>
       <Mono size="sm" color={approved ? 'secondary' : 'primary'} as="span">
-        {shortAddr}
+        {shortAddr} ({symbol})
       </Mono>
       {approved ? (
         <Badge variant="verified" size="sm" dot />
@@ -139,6 +142,16 @@ export function ConnectFlow() {
 
   // Token approval tracking
   const [approvedTokens, setApprovedTokens] = useState<Set<string>>(new Set())
+
+  const handleTokenStatus = useCallback((tokenAddr: Hex, isApproved: boolean) => {
+    setApprovedTokens((prev) => {
+      const next = new Set(prev)
+      if (isApproved) next.add(tokenAddr)
+      else next.delete(tokenAddr)
+      if (next.size === prev.size) return prev
+      return next
+    })
+  }, [])
 
   // Advance to step 2 once wallet connected
   useEffect(() => {
@@ -353,9 +366,10 @@ export function ConnectFlow() {
                   <TokenApprovalRow
                     key={token.address}
                     token={token.address}
+                    symbol={token.symbol}
                     spender={pubkey}
                     owner={address as Hex}
-                    onDone={() => setApprovedTokens((prev) => new Set([...prev, token.address]))}
+                    onStatusChange={handleTokenStatus}
                   />
                 ))}
               </div>
