@@ -10,7 +10,7 @@ import React, {
 } from 'react'
 import { MessageBubble } from '@/components/chat/MessageBubble'
 import { Label, Mono } from '@/components/design-system/Typography'
-import { useChatStore } from '@/lib/store/chatStore'
+import { useChatStore, selectMessages } from '@/lib/store/chatStore'
 import { postChat } from '@/lib/api'
 import type { TradeProposal } from '@/lib/types'
 
@@ -32,7 +32,7 @@ interface ChatStreamProps {
 
 export const ChatStream = forwardRef<ChatStreamHandle, ChatStreamProps>(
   function ChatStream({ sessionId: _sessionId, onProposalReceived }, ref) {
-    const messages           = useChatStore((s) => s.messages)
+    const messages           = useChatStore(selectMessages)
     const isStreaming        = useChatStore((s) => s.isStreaming)
     const addMessage         = useChatStore((s) => s.addMessage)
     const updateLastMessage  = useChatStore((s) => s.updateLastMessage)
