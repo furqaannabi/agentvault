@@ -62,7 +62,7 @@ const delegateAddr = (process.env.SEPOLIA_SIGNER_ADDR ??
 if (!delegateAddr) {
   throw new Error('SEPOLIA_PRIVATE_KEY or SEPOLIA_SIGNER_ADDR required for session middleware');
 }
-const chainId = Number(process.env.EXEC_CHAIN_ID ?? 84532);
+const chainId = Number(process.env.EXEC_CHAIN_ID ?? 11155111);
 const sessions = createSessionStore({ delegate: delegateAddr, chainId });
 const allowedTokens = parseAllowedTokens(process.env.ALLOWED_TOKENS);
 
