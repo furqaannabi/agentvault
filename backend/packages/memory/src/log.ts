@@ -12,7 +12,14 @@ export async function logAppend<T>(z: ZgClients, payload: T): Promise<LogAppendR
   const json = JSON.stringify(payload);
   const data = new MemData(enc.encode(json));
   // @ts-expect-error ethers ESM/CJS dual-package hazard: SDK bundled types reference different ethers instance
-  const [tx, err] = await z.indexer.upload(data, z.cfg.rpcUrl, z.signer);
+  const [tx, err] = await z.indexer.upload(data, z.cfg.rpcUrl, z.signer, {
+    tags: '0x',
+    finalityRequired: true,
+    taskSize: 1,
+    expectedReplica: 1,
+    skipTx: false,
+    fee: 2_000_000_000_000_000n,
+  });
   if (err !== null) throw new Error(`indexer.upload: ${String(err)}`);
   // SDK shape: single-file upload returns { rootHash, txHash }
   const t = tx as { rootHash?: string; txHash?: string };

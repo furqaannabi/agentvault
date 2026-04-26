@@ -21,7 +21,17 @@ export async function kvSet(
   const flow = getFlowContract(z.cfg.flowContract, z.signer);
   const batcher = new Batcher(1, nodes, flow, z.cfg.rpcUrl);
   batcher.streamDataBuilder.set(streamId, toBytes(key), toBytes(value));
-  const [, batchErr] = await batcher.exec();
+  // Explicit fee well above market rate. SDK auto-quote sometimes lags real
+  // pricePerSector causing Flow.submit to require(false). 0.002 OG per write
+  // is generous for hackathon volume; lower if cost matters.
+  const [, batchErr] = await batcher.exec({
+    tags: '0x',
+    finalityRequired: true,
+    taskSize: 1,
+    expectedReplica: 1,
+    skipTx: false,
+    fee: 2_000_000_000_000_000n,
+  });
   if (batchErr !== null) throw new Error(`batcher.exec: ${String(batchErr)}`);
 }
 

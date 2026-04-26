@@ -80,6 +80,22 @@ export function createMemory(cfg: MemoryConfig = memoryConfigFromEnv()): Memory 
   const ks = z.cfg.streamState;
   const kp = z.cfg.streamProposal;
 
+  // Async startup balance check. Each KV write attaches ~0.002 OG; warn if
+  // wallet too low so soft-fails are diagnosed early instead of mid-demo.
+  void z.provider
+    .getBalance(z.signer.address)
+    .then((bal) => {
+      const min = 50_000_000_000_000_000n; // 0.05 OG
+      if (bal < min) {
+        console.warn(
+          `[memory] wallet ${z.signer.address} balance ${bal} wei < 0.05 OG; refill via https://faucet.0g.ai`,
+        );
+      } else {
+        console.log(`[memory] wallet ${z.signer.address} balance ${bal} wei`);
+      }
+    })
+    .catch((e) => console.warn('[memory] balance check failed:', (e as Error).message));
+
   const portfolios = new Map<string, PortfolioState>();
   const convos = new Map<string, ConvoState>();
   const proposals = new Map<string, TradeProposal>();
