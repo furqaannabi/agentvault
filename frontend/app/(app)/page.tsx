@@ -11,18 +11,25 @@ import type { Proof } from '@/lib/types'
 
 export default function HomePage() {
   const streamRef      = useRef<ChatStreamHandle>(null)
-  const activeId       = useChatStore((s) => s.activeSessionId)
-  const createSession  = useChatStore((s) => s.createSession)
+  const activeId        = useChatStore((s) => s.activeSessionId)
+  const sessions        = useChatStore((s) => s.sessions)
+  const createSession   = useChatStore((s) => s.createSession)
+  const setActiveSession = useChatStore((s) => s.setActiveSession)
   const pendingProposal = useChatStore((s) => s.pendingProposal)
   const setPending     = useChatStore((s) => s.setPendingProposal)
   const addMessage     = useChatStore((s) => s.addMessage)
   const isStreaming    = useChatStore((s) => s.isStreaming)
   const addProof       = useProofStore((s) => s.addProof)
 
-  // Seed a session on first load if none exists
+  // On load: restore most recent session or create first one
   useEffect(() => {
-    if (!activeId) createSession()
-  }, [activeId, createSession])
+    if (activeId) return                           // already have one
+    if (sessions.length > 0) {
+      setActiveSession(sessions[0].id)             // restore most recent
+    } else {
+      createSession()                              // truly first visit
+    }
+  }, [activeId, sessions, createSession, setActiveSession])
 
   const handleApproved = useCallback((proof: Proof) => {
     addProof(proof)
