@@ -1,7 +1,12 @@
 import type { Memory } from '@agentvault/memory';
-import type { ExecResult, PolicyVerdict, Proof, TradeProposal } from '@agentvault/types';
+import type { ExecResult, Hex, PolicyVerdict, Proof, TradeProposal } from '@agentvault/types';
 import type { AnchorClient } from './anchor.js';
 import { computeRoot } from './hash.js';
+
+export interface SessionBinding {
+  userAddr: Hex;
+  sessionHash: Hex;
+}
 
 export interface AssembleDeps {
   memory: Memory;
@@ -17,15 +22,22 @@ export interface AssembleDeps {
  */
 export async function assembleProof(
   deps: AssembleDeps,
-  input: { proposal: TradeProposal; verdict: PolicyVerdict; exec: ExecResult },
+  input: {
+    proposal: TradeProposal;
+    verdict: PolicyVerdict;
+    exec: ExecResult;
+    session: SessionBinding;
+  },
 ): Promise<Proof> {
-  const { proposal, verdict, exec } = input;
+  const { proposal, verdict, exec, session } = input;
   const rootHash = computeRoot(proposal, verdict, exec);
 
   // Body persisted to immutable Log; logCid = the root hash returned by indexer
   const logBody = {
     kind: 'agentvault.proof.v1' as const,
     proposalId: proposal.id,
+    userAddr: session.userAddr,
+    sessionHash: session.sessionHash,
     proposal,
     verdict,
     exec,
@@ -39,6 +51,8 @@ export async function assembleProof(
 
   const proof: Proof = {
     proposalId: proposal.id,
+    userAddr: session.userAddr,
+    sessionHash: session.sessionHash,
     proposal,
     verdict,
     exec,

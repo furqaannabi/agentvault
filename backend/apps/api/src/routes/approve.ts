@@ -1,4 +1,4 @@
-import { type PolicyContext, policyFromSession } from '@agentvault/policy';
+import { type PolicyContext, policyFromSession, sessionHash } from '@agentvault/policy';
 import type { AgentSession } from '@agentvault/types';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -33,6 +33,7 @@ export function approveRoute(deps: AppDeps) {
     if (!parsed.success) return c.json({ error: 'bad request' }, 400);
 
     const session = c.get('session');
+    const signed = c.get('signed');
     const userId = session.user.toLowerCase();
 
     const proposal = await deps.memory.getProposal(userId, parsed.data.proposalId);
@@ -51,7 +52,12 @@ export function approveRoute(deps: AppDeps) {
         return c.json({ error: 'exec_failed', exec, verdict }, 502);
       }
 
-      const proof = await deps.proof.assemble({ proposal, verdict, exec });
+      const proof = await deps.proof.assemble({
+        proposal,
+        verdict,
+        exec,
+        session: { userAddr: session.user, sessionHash: sessionHash(signed) },
+      });
       return c.json({ proof });
     } catch (e) {
       return c.json({ error: 'approve_failed', detail: (e as Error).message }, 500);

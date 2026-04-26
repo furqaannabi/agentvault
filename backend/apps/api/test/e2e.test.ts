@@ -90,9 +90,19 @@ describe('e2e: chat → approve → proof', () => {
 
     const approve = await postJson(app, '/approve', { proposalId: proposal.id }, signed);
     expect(approve.status).toBe(200);
-    const proof = (approve.body as { proof: { proposalId: string; rootHash: string; anchorTx: string } }).proof;
+    const proof = (approve.body as {
+      proof: {
+        proposalId: string;
+        rootHash: string;
+        anchorTx: string;
+        userAddr: string;
+        sessionHash: string;
+      };
+    }).proof;
     expect(proof.proposalId).toBe(proposal.id);
     expect(proof.rootHash).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(proof.userAddr.toLowerCase()).toBe(testUserAddr().toLowerCase());
+    expect(proof.sessionHash).toMatch(/^0x[0-9a-f]{64}$/);
 
     const res = await app.request(`/proof/${proposal.id}`, {
       headers: { authorization: sessionHeader(signed) },

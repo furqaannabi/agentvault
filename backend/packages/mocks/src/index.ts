@@ -85,6 +85,8 @@ export const mockExecRejected = (overrides: Partial<ExecResult> = {}): ExecResul
 
 export const mockProof = (overrides: Partial<Proof> = {}): Proof => ({
   proposalId: 'prop_mock_001',
+  userAddr: ('0x' + '11'.repeat(20)) as Hex,
+  sessionHash: ZERO_HASH,
   proposal: mockProposal(),
   verdict: mockVerdict(),
   exec: mockExecResult(),

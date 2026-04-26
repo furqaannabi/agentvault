@@ -59,6 +59,10 @@ export interface ExecResult {
 
 export interface Proof {
   proposalId: string;
+  /** End-user wallet that authorized this trade via signed AgentSession. */
+  userAddr: Hex;
+  /** EIP-712 hash of the AgentSession that authorized this trade. */
+  sessionHash: Hex;
   proposal: TradeProposal;
   verdict: PolicyVerdict;
   exec: ExecResult;

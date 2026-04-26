@@ -1,8 +1,10 @@
 import type { Memory } from '@agentvault/memory';
-import type { ExecResult, PolicyVerdict, Proof, TradeProposal } from '@agentvault/types';
+import type { ExecResult, Hex, PolicyVerdict, Proof, TradeProposal } from '@agentvault/types';
 import { type AnchorClient, makeAnchorClient } from './anchor.js';
-import { assembleProof } from './assemble.js';
+import { type SessionBinding, assembleProof } from './assemble.js';
 import { type ProofConfig, proofConfigFromEnv } from './config.js';
+
+export type { SessionBinding } from './assemble.js';
 
 export type { ProofConfig } from './config.js';
 export { canonicalize, computeRoot, hashCanonical, hashExec, hashProposal, hashVerdict } from './hash.js';
@@ -12,8 +14,9 @@ export interface ProofPipeline {
     proposal: TradeProposal;
     verdict: PolicyVerdict;
     exec: ExecResult;
+    session: SessionBinding;
   }): Promise<Proof>;
-  isAnchored(rootHash: `0x${string}`): Promise<boolean>;
+  isAnchored(rootHash: Hex): Promise<boolean>;
 }
 
 export interface ProofDeps {
