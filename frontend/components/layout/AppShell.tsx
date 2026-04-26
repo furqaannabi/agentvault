@@ -9,6 +9,7 @@ import { useChatStore } from '@/lib/store/chatStore'
 import { useSessionStore } from '@/lib/store/sessionStore'
 import { deleteSession } from '@/lib/api'
 
+
 // ── Drawer context ─────────────────────────────────────────────────────────────
 
 interface DrawerContextValue {
@@ -120,17 +121,6 @@ function SidebarInner() {
   const isStreaming      = useChatStore((s) => s.isStreaming)
   const createSession    = useChatStore((s) => s.createSession)
   const setActiveSession = useChatStore((s) => s.setActiveSession)
-  const signedSession    = useSessionStore((s) => s.signedSession)
-  const hasHydrated      = useSessionStore((s) => s._hasHydrated)
-
-  // Auth guard — redirect to /connect if no session
-  React.useEffect(() => {
-    if (!hasHydrated) return
-    if (!signedSession && pathname !== '/connect') {
-      router.push('/connect')
-    }
-  }, [signedSession, hasHydrated, pathname, router])
-
   async function handleDisconnect() {
     await deleteSession()
     router.push('/connect')
