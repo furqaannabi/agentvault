@@ -23,17 +23,17 @@ export function fakeMemory(): Memory {
     async setConvo(s) {
       convo.set(s.userId, s);
     },
-    async getProposal(id) {
-      return proposal.get(id) ?? null;
+    async getProposal(user, id) {
+      return proposal.get(`${user.toLowerCase()}:${id}`) ?? null;
     },
     async setProposal(p) {
-      proposal.set(p.id, p);
+      proposal.set(`${p.userId.toLowerCase()}:${p.id}`, p);
     },
-    async getProof(id) {
-      return proof.get(id) ?? null;
+    async getProof(user, id) {
+      return proof.get(`${user.toLowerCase()}:${id}`) ?? null;
     },
     async setProof(p) {
-      proof.set(p.proposalId, p);
+      proof.set(`${p.proposal.userId.toLowerCase()}:${p.proposalId}`, p);
     },
     async appendLog(entry) {
       const rootHash = `cid_${log.length}`;

@@ -5,6 +5,8 @@ import type { AppDeps } from '../deps.js';
 
 const Body = z.object({
   proposalId: z.string().min(1),
+  // Bridge until session middleware lands (commit 6); FE passes user addr.
+  userId: z.string().min(1),
 });
 
 /**
@@ -29,7 +31,7 @@ export function approveRoute(deps: AppDeps) {
     const parsed = Body.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'bad request' }, 400);
 
-    const proposal = await deps.memory.getProposal(parsed.data.proposalId);
+    const proposal = await deps.memory.getProposal(parsed.data.userId, parsed.data.proposalId);
     if (!proposal) return c.json({ error: 'proposal_not_found' }, 404);
 
     try {

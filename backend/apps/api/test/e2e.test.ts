@@ -75,7 +75,7 @@ describe('e2e: chat → approve → proof', () => {
     expect(proposal.tokenIn).toBe('0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238');
 
     // 2. Approve
-    const approve = await postJson(app, '/approve', { proposalId: proposal.id });
+    const approve = await postJson(app, '/approve', { proposalId: proposal.id, userId: 'alice' });
     expect(approve.status).toBe(200);
     const proof = (approve.body as { proof: { proposalId: string; rootHash: string; anchorTx: string } })
       .proof;
@@ -84,7 +84,7 @@ describe('e2e: chat → approve → proof', () => {
     expect(proof.anchorTx).toMatch(/^0xanchor/);
 
     // 3. Fetch proof
-    const get = await app.request(`/proof/${proposal.id}`);
+    const get = await app.request(`/proof/${proposal.id}?userId=alice`);
     expect(get.status).toBe(200);
     const fetched = (await get.json()) as { proof: { rootHash: string } };
     expect(fetched.proof.rootHash).toBe(proof.rootHash);
@@ -122,7 +122,7 @@ describe('e2e: chat → approve → proof', () => {
 
     const chat = await postJson(app, '/chat', { userId: 'bob', msg: 'go big' });
     const proposalId = (chat.body as { proposal: { id: string } }).proposal.id;
-    const approve = await postJson(app, '/approve', { proposalId });
+    const approve = await postJson(app, '/approve', { proposalId, userId: 'bob' });
     expect(approve.status).toBe(200);
     const rej = approve.body as { rejected: { ok: boolean; rules: { id: string; pass: boolean }[] } };
     expect(rej.rejected.ok).toBe(false);
@@ -132,7 +132,7 @@ describe('e2e: chat → approve → proof', () => {
 
   it('returns 404 for unknown proposal', async () => {
     const app = buildTestApp();
-    const r = await postJson(app, '/approve', { proposalId: 'prop_nope' });
+    const r = await postJson(app, '/approve', { proposalId: 'prop_nope', userId: 'alice' });
     expect(r.status).toBe(404);
   });
 

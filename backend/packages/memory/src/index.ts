@@ -19,9 +19,9 @@ export interface Memory {
   setPortfolio(state: PortfolioState): Promise<void>;
   getConvo(userId: string): Promise<ConvoState | null>;
   setConvo(state: ConvoState): Promise<void>;
-  getProposal(id: string): Promise<TradeProposal | null>;
+  getProposal(user: string, id: string): Promise<TradeProposal | null>;
   setProposal(proposal: TradeProposal): Promise<void>;
-  getProof(id: string): Promise<Proof | null>;
+  getProof(user: string, id: string): Promise<Proof | null>;
   setProof(proof: Proof): Promise<void>;
   // Log: immutable history
   appendLog<T>(entry: T): Promise<LogAppendResult>;
@@ -101,46 +101,60 @@ export function createMemory(cfg: MemoryConfig = memoryConfigFromEnv()): Memory 
   const proposals = new Map<string, TradeProposal>();
   const proofs = new Map<string, Proof>();
 
+  // All keys lowercased so an addr collision (mixed-case checksum) can't split state.
+  const norm = (u: string) => u.toLowerCase();
+  const proposalKey = (user: string, id: string) => `${norm(user)}:${id}`;
+  const proofKey = (user: string, id: string) => `${norm(user)}:${id}`;
+
   return {
     async getPortfolio(userId) {
-      if (portfolios.has(userId)) return portfolios.get(userId)!;
-      const v = await softRead('getPortfolio', kvGetJson<PortfolioState>(z, ks, `portfolio:${userId}`));
-      if (v) portfolios.set(userId, v);
+      const u = norm(userId);
+      if (portfolios.has(u)) return portfolios.get(u)!;
+      const v = await softRead('getPortfolio', kvGetJson<PortfolioState>(z, ks, `portfolio:${u}`));
+      if (v) portfolios.set(u, v);
       return v;
     },
     async setPortfolio(s) {
-      portfolios.set(s.userId, s);
-      void softWrite('setPortfolio', kvSetJson(z, ks, `portfolio:${s.userId}`, s));
+      const u = norm(s.userId);
+      portfolios.set(u, s);
+      void softWrite('setPortfolio', kvSetJson(z, ks, `portfolio:${u}`, s));
     },
     async getConvo(userId) {
-      if (convos.has(userId)) return convos.get(userId)!;
-      const v = await softRead('getConvo', kvGetJson<ConvoState>(z, ks, `convo:${userId}`));
-      if (v) convos.set(userId, v);
+      const u = norm(userId);
+      if (convos.has(u)) return convos.get(u)!;
+      const v = await softRead('getConvo', kvGetJson<ConvoState>(z, ks, `convo:${u}`));
+      if (v) convos.set(u, v);
       return v;
     },
     async setConvo(s) {
-      convos.set(s.userId, s);
-      void softWrite('setConvo', kvSetJson(z, ks, `convo:${s.userId}`, s));
+      const u = norm(s.userId);
+      convos.set(u, s);
+      void softWrite('setConvo', kvSetJson(z, ks, `convo:${u}`, s));
     },
-    async getProposal(id) {
-      if (proposals.has(id)) return proposals.get(id)!;
-      const v = await softRead('getProposal', kvGetJson<TradeProposal>(z, kp, `proposal:${id}`));
-      if (v) proposals.set(id, v);
+    async getProposal(user, id) {
+      const k = proposalKey(user, id);
+      if (proposals.has(k)) return proposals.get(k)!;
+      const v = await softRead('getProposal', kvGetJson<TradeProposal>(z, kp, `proposal:${k}`));
+      if (v) proposals.set(k, v);
       return v;
     },
     async setProposal(p) {
-      proposals.set(p.id, p);
-      void softWrite('setProposal', kvSetJson(z, kp, `proposal:${p.id}`, p));
+      const k = proposalKey(p.userId, p.id);
+      proposals.set(k, p);
+      void softWrite('setProposal', kvSetJson(z, kp, `proposal:${k}`, p));
     },
-    async getProof(id) {
-      if (proofs.has(id)) return proofs.get(id)!;
-      const v = await softRead('getProof', kvGetJson<Proof>(z, kp, `proof:${id}`));
-      if (v) proofs.set(id, v);
+    async getProof(user, id) {
+      const k = proofKey(user, id);
+      if (proofs.has(k)) return proofs.get(k)!;
+      const v = await softRead('getProof', kvGetJson<Proof>(z, kp, `proof:${k}`));
+      if (v) proofs.set(k, v);
       return v;
     },
     async setProof(p) {
-      proofs.set(p.proposalId, p);
-      void softWrite('setProof', kvSetJson(z, kp, `proof:${p.proposalId}`, p));
+      // Proof embeds the proposal which carries userId — single source of truth.
+      const k = proofKey(p.proposal.userId, p.proposalId);
+      proofs.set(k, p);
+      void softWrite('setProof', kvSetJson(z, kp, `proof:${k}`, p));
     },
     async appendLog(entry) {
       const ms = 12_000;
