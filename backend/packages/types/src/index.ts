@@ -87,6 +87,29 @@ export interface ConvoState {
   updatedAt: number;
 }
 
+/**
+ * Off-chain delegation: user signs an EIP-712 AgentSession granting the
+ * backend signer (`delegate`) bounded authority to execute swaps on their
+ * behalf. Bounds enforced by policy package on every proposal.
+ */
+export interface AgentSession {
+  user: Hex;
+  delegate: Hex;
+  chainId: number;
+  allowedTokens: Hex[];
+  maxDailyVolumeUsd: number;
+  maxTradeUsd: number;
+  maxSlippageBps: number;
+  cooldownSec: number;
+  expiresAt: number;
+  nonce: Hex;
+}
+
+export interface SignedSession {
+  session: AgentSession;
+  signature: Hex;
+}
+
 /** Modes for the exec package — BE1 dev runs mock; BE2 implements real */
 export type ExecMode = 'mock' | 'real';
 
