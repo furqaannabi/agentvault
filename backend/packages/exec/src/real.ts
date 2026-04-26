@@ -18,6 +18,12 @@ import type { ExecConfig } from './index.js';
  */
 const ZERO_HASH: Hex = '0x0000000000000000000000000000000000000000000000000000000000000000';
 const ERC20_TRANSFER_TOPIC = ethers.id('Transfer(address,address,uint256)');
+const ERC20_ABI = [
+  'function allowance(address owner, address spender) view returns (uint256)',
+  'function transferFrom(address from, address to, uint256 amount) returns (bool)',
+  'function transfer(address to, uint256 amount) returns (bool)',
+  'function balanceOf(address) view returns (uint256)',
+];
 
 interface ApprovalResponse {
   approval?: { to: Hex; data: Hex; value?: string } | null;
@@ -65,7 +71,7 @@ export function realAdapter(config: ExecConfig): ExecAdapter {
   const cache = new Map<string, ExecResult>();
 
   return {
-    async swap({ proposal, verdict }: ExecSwapInput): Promise<ExecResult> {
+    async swap({ proposal, verdict, user }: ExecSwapInput): Promise<ExecResult> {
       const cached = cache.get(proposal.id);
       if (cached) return cached;
 
@@ -88,6 +94,25 @@ export function realAdapter(config: ExecConfig): ExecAdapter {
 
       try {
         const swapper = wallet.address as Hex;
+        const amountInBig = BigInt(proposal.amountIn);
+        // biome-ignore lint/suspicious/noExplicitAny: ethers Contract method types are dynamic
+        const tokenIn: any = new ethers.Contract(proposal.tokenIn, ERC20_ABI, wallet);
+        // biome-ignore lint/suspicious/noExplicitAny: ethers Contract method types are dynamic
+        const tokenOut: any = new ethers.Contract(proposal.tokenOut, ERC20_ABI, wallet);
+
+        // 0a. Allowance check
+        const allowance: bigint = await tokenIn.allowance(user, swapper);
+        if (allowance < amountInBig) {
+          return fail(
+            'failed',
+            `allowance ${allowance} < amountIn ${amountInBig}; user must re-approve token ${proposal.tokenIn}`,
+          );
+        }
+
+        // 0b. Pull funds from user → backend signer
+        const pullTx = await tokenIn.transferFrom(user, swapper, amountInBig);
+        const pullR = await pullTx.wait();
+        if (!pullR || pullR.status !== 1) return fail('failed', 'transferFrom user failed');
 
         // 1. Check approval — Uniswap returns an approval tx if Permit2 isn't approved on tokenIn
         const approvalRes = await uniswap.checkApproval<ApprovalResponse>({
@@ -164,6 +189,15 @@ export function realAdapter(config: ExecConfig): ExecAdapter {
         }
         if (amountOut === 0n && quoteRes.output?.amount) {
           amountOut = BigInt(quoteRes.output.amount);
+        }
+
+        // 7. Forward output to end user
+        if (amountOut > 0n) {
+          const forwardTx = await tokenOut.transfer(user, amountOut);
+          const forwardR = await forwardTx.wait();
+          if (!forwardR || forwardR.status !== 1) {
+            return fail('failed', `swap ok but transfer to user failed (amount=${amountOut})`);
+          }
         }
 
         const result: ExecResult = {

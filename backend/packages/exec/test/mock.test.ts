@@ -9,6 +9,7 @@ describe('exec mock adapter', () => {
     const r = await adapter.swap({
       proposal: mockProposal({ amountIn: '1000000' }),
       verdict: mockVerdict({ ok: true }),
+      user: ('0x' + '11'.repeat(20)) as `0x${string}`,
     });
     expect(r.status).toBe('success');
     expect(r.proposalId).toBe('prop_mock_001');
@@ -19,6 +20,7 @@ describe('exec mock adapter', () => {
     const r = await adapter.swap({
       proposal: mockProposal(),
       verdict: mockVerdict({ ok: false }),
+      user: ('0x' + '11'.repeat(20)) as `0x${string}`,
     });
     expect(r.status).toBe('failed');
     expect(r.error).toMatch(/verdict\.ok=false/);
@@ -28,10 +30,12 @@ describe('exec mock adapter', () => {
     const small = await adapter.swap({
       proposal: mockProposal({ id: 'a', amountIn: '1000000' }),
       verdict: mockVerdict({ proposalId: 'a' }),
+      user: ('0x' + '11'.repeat(20)) as `0x${string}`,
     });
     const big = await adapter.swap({
       proposal: mockProposal({ id: 'b', amountIn: '5000000' }),
       verdict: mockVerdict({ proposalId: 'b' }),
+      user: ('0x' + '11'.repeat(20)) as `0x${string}`,
     });
     expect(BigInt(big.amountOut)).toBeGreaterThan(BigInt(small.amountOut));
   });

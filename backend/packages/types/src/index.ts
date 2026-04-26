@@ -116,6 +116,8 @@ export type ExecMode = 'mock' | 'real';
 export interface ExecSwapInput {
   proposal: TradeProposal;
   verdict: PolicyVerdict;
+  /** End-user wallet (delegating principal). Real adapter pulls via allowance + returns output here. */
+  user: Hex;
 }
 
 export interface ExecAdapter {

@@ -42,7 +42,11 @@ export function approveRoute(deps: AppDeps) {
         return c.json({ rejected: verdict });
       }
 
-      const exec = await deps.exec.swap({ proposal, verdict });
+      const exec = await deps.exec.swap({
+        proposal,
+        verdict,
+        user: parsed.data.userId as `0x${string}`,
+      });
       if (exec.status !== 'success') {
         return c.json({ error: 'exec_failed', exec, verdict }, 502);
       }
