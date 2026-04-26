@@ -14,6 +14,17 @@ import type { PolicyContext, PolicyDefaults } from './types.js';
 export type { PolicyContext, PolicyDefaults } from './types.js';
 export { verdictDigest } from './sign.js';
 export { DEFAULT_POLICY } from './config.js';
+export {
+  EIP712_DOMAIN_NAME,
+  EIP712_DOMAIN_VERSION,
+  EIP712_TYPES,
+  SessionError,
+  eip712Domain,
+  sessionHash,
+  signSession,
+  verifySession,
+  type SessionVerifierConfig,
+} from './session.js';
 
 export interface Policy {
   check(proposal: TradeProposal, ctx: PolicyContext): Promise<PolicyVerdict>;
