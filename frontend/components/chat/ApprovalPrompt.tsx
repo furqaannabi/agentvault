@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import { Heading, Body, Label, Mono } from '@/components/design-system/Typography'
 import { Badge } from '@/components/design-system/Badge'
 import { approveProposal } from '@/lib/api'
+import { useSessionStore } from '@/lib/store/sessionStore'
 import type { TradeProposal, Proof } from '@/lib/types'
 
 interface ApprovalPromptProps {
@@ -27,7 +28,31 @@ export function ApprovalPrompt({
   const [status, setStatus] = useState<Status>('pending')
   const [error, setError]   = useState<string | null>(null)
 
+  const config = useSessionStore((s) => s.config)
+
   const busy = status === 'approving' || status === 'rejecting'
+
+  // Resolve token metadata
+  const tIn  = config?.allowedTokens.find((t) => t.address.toLowerCase() === proposal.tokenIn.toLowerCase())
+  const tOut = config?.allowedTokens.find((t) => t.address.toLowerCase() === proposal.tokenOut.toLowerCase())
+
+  const inSymbol  = tIn?.symbol ?? `${proposal.tokenIn.slice(0, 6)}…`
+  const outSymbol = tOut?.symbol ?? `${proposal.tokenOut.slice(0, 6)}…`
+
+  // Format amount based on decimals
+  let formattedAmount = proposal.amountIn
+  if (tIn) {
+    try {
+      const raw = BigInt(proposal.amountIn)
+      const divisor = 10n ** BigInt(tIn.decimals)
+      const whole = raw / divisor
+      const frac = raw % divisor
+      const fracStr = frac.toString().padStart(tIn.decimals, '0').slice(0, 4).replace(/0+$/, '')
+      formattedAmount = fracStr.length > 0 ? `${whole}.${fracStr}` : `${whole}`
+    } catch {
+      // Fallback
+    }
+  }
 
   async function handleApprove() {
     if (busy) return
@@ -93,7 +118,7 @@ export function ApprovalPrompt({
               marginBottom:  'var(--space-2)',
             }}
           >
-            SWAP {proposal.amountIn} {proposal.tokenIn} → {proposal.tokenOut}
+            SWAP {formattedAmount} {inSymbol} → {outSymbol}
           </Heading>
 
           {/* Trade metadata */}
@@ -104,7 +129,7 @@ export function ApprovalPrompt({
               marginBottom: 'var(--space-4)',
             }}
           >
-            <Mono size="xs" color="muted" as="span">
+            <Mono size="xs" color="secondary" as="span">
               Max slippage: {formatSlippage(proposal.maxSlippageBps)}
             </Mono>
             <Mono size="xs" color="muted" as="span">

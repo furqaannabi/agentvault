@@ -15,10 +15,10 @@
   --color-border-focus:  #00e5c3;
 
   /* ── Text ────────────────────────────────────────────────── */
-  --color-text-primary:   #e6edf3;
-  --color-text-secondary: #8b949e;
-  --color-text-muted:     #484f58;
-  --color-text-disabled:  #30363d;
+  --color-text-primary:   #f0f6fc;
+  --color-text-secondary: #a1b0c0;
+  --color-text-muted:     #6e7681;
+  --color-text-disabled:  #484f58;
   --color-text-inverse:   #080c10;
 
   /* ── Accent — Teal (VERIFIED · PASS · active) ────────────── */
