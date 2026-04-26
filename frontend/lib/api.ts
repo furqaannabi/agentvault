@@ -109,14 +109,18 @@ export async function getPortfolio(): Promise<Portfolio> {
   return safeJson<Portfolio>(res)
 }
 
-export async function postChat(msg: string): Promise<TradeProposal> {
+export interface ChatApiResponse {
+  reply?:    string
+  proposal?: TradeProposal
+}
+
+export async function postChat(msg: string): Promise<ChatApiResponse> {
   const res = await authedFetch('/chat', {
     method: 'POST',
     body:   JSON.stringify({ msg }),
   })
   if (!res.ok) throw new Error(`POST /chat failed: ${res.status}`)
-  const data = await safeJson<{ proposal: TradeProposal }>(res)
-  return data.proposal
+  return safeJson<ChatApiResponse>(res)
 }
 
 export async function approveProposal(proposalId: string): Promise<Proof> {

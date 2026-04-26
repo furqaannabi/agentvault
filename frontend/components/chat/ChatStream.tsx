@@ -14,6 +14,7 @@ import { useChatStore } from '@/lib/store/chatStore'
 import { postChat } from '@/lib/api'
 import type { TradeProposal } from '@/lib/types'
 
+
 // ── Public handle exposed via ref ──────────────────────────────────────────────
 
 export interface ChatStreamHandle {
@@ -67,13 +68,21 @@ export const ChatStream = forwardRef<ChatStreamHandle, ChatStreamProps>(
       })
 
       try {
-        const proposal = await postChat(content)
+        const response = await postChat(content)
 
-        // Replace typing indicator with a brief confirmation then surface proposal
-        updateLastMessage('Analysing your request…')
-        finalizeStream()
-        setPendingProposal(proposal)
-        onProposalReceived?.(proposal)
+        if (response.proposal) {
+          // Trade proposal — surface the approval prompt
+          updateLastMessage('Proposal ready. Review below.')
+          finalizeStream()
+          setPendingProposal(response.proposal)
+          onProposalReceived?.(response.proposal)
+        } else if (response.reply) {
+          // Conversational reply — show as twin message
+          updateLastMessage(response.reply)
+          finalizeStream()
+        } else {
+          throw new Error('Unexpected response from server.')
+        }
       } catch (err) {
         finalizeStream()
         setError(err instanceof Error ? err.message : 'Request failed. Try again.')
