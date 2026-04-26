@@ -1,6 +1,7 @@
 import type { AgentSession, Hex } from '@agentvault/types';
 import { ethers } from 'ethers';
 import { describe, expect, it } from 'vitest';
+import { policyFromSession } from '../src/config.js';
 import { SessionError, signSession, verifySession } from '../src/session.js';
 
 const USER_KEY = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
@@ -71,6 +72,16 @@ describe('verifySession', () => {
     expect(() =>
       verifySession(signed, { delegate: session.delegate, chainId: session.chainId }),
     ).toThrow(/bad_signature/);
+  });
+
+  it('projects session to PolicyDefaults', () => {
+    const session = buildSession({ maxTradeUsd: 1500, maxDailyVolumeUsd: 7500, cooldownSec: 45 });
+    const cfg = policyFromSession(session);
+    expect(cfg.maxAmountIn).toBe(1_500_000_000n);
+    expect(cfg.dailyCap).toBe(7_500_000_000n);
+    expect(cfg.cooldownMs).toBe(45_000);
+    expect(cfg.maxSlippageBps).toBe(session.maxSlippageBps);
+    expect(cfg.whitelist).toEqual(session.allowedTokens.map((a) => a.toLowerCase()));
   });
 
   it('rejects revoked nonce', async () => {

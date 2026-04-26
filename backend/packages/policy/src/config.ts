@@ -1,4 +1,4 @@
-import type { Hex } from '@agentvault/types';
+import type { AgentSession, Hex } from '@agentvault/types';
 import type { PolicyDefaults } from './types.js';
 
 function req(name: string): string {
@@ -26,3 +26,19 @@ export const DEFAULT_POLICY: PolicyDefaults = {
   dailyCap: 5_000_000_000n, // 5000 USDC base units
   cooldownMs: 30_000, // 30s
 };
+
+/**
+ * Project per-user bounds from a signed AgentSession to PolicyDefaults.
+ * USD figures map 1:1 to 6-decimal stablecoin base units (USDC convention).
+ * Cooldown converted from seconds to ms.
+ */
+export function policyFromSession(session: AgentSession): PolicyDefaults {
+  const usdToBase = (usd: number) => BigInt(Math.floor(usd)) * 1_000_000n;
+  return {
+    whitelist: session.allowedTokens.map((a) => a.toLowerCase() as Hex),
+    maxAmountIn: usdToBase(session.maxTradeUsd),
+    maxSlippageBps: session.maxSlippageBps,
+    dailyCap: usdToBase(session.maxDailyVolumeUsd),
+    cooldownMs: session.cooldownSec * 1000,
+  };
+}
