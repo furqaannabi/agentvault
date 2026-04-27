@@ -1,4 +1,5 @@
 import type { ConvoState, PortfolioState } from '@agentvault/types';
+import type { ExtractedTrade } from './extract.js';
 
 export const INTENT_PROMPT = `You are an intent classifier for a DeFi portfolio assistant. Classify the user message as either a trade request or general conversation.
 
@@ -29,8 +30,8 @@ Rules:
 - Always return valid JSON. No markdown fences, no commentary.
 - Use ONLY the addresses listed above. Never use Mainnet addresses.
 - maxSlippageBps must be conservative (default 50, max 100).
-- amountIn is base units (USDC: amount * 1e6, WETH: amount * 1e18).
-- If user says "1 USDC" → amountIn="1000000". If "0.5 ETH" or "WETH" → amountIn="500000000000000000".`;
+- When PRE_CALCULATED fields are provided in the user prompt, use them EXACTLY — do not recalculate amountIn, tokenIn, or tokenOut.
+- Only calculate amountIn yourself when no PRE_CALCULATED block is present.`;
 
 export const CHAT_PROMPT = `You are ProofTwin, a verifiable AI portfolio manager on Ethereum Sepolia testnet. You help users manage their DeFi portfolio by proposing and executing swaps between USDC and WETH.
 
@@ -46,6 +47,7 @@ export function buildUserPrompt(
   msg: string,
   portfolio: PortfolioState | null,
   convo: ConvoState | null,
+  extracted?: ExtractedTrade | null,
 ): string {
   const portfolioBlock = portfolio
     ? JSON.stringify(portfolio.balances, null, 2)
@@ -64,12 +66,23 @@ export function buildUserPrompt(
         .map((t: { role: string; content: string }) => `${t.role}: ${t.content}`)
         .join('\n')
     : '(no prior conversation)';
+  const preCalc = extracted
+    ? [
+        '',
+        'PRE_CALCULATED (use these values exactly — do not modify):',
+        `  tokenIn:  ${extracted.tokenIn}  (${extracted.symbolIn})`,
+        `  tokenOut: ${extracted.tokenOut}  (${extracted.symbolOut})`,
+        `  amountIn: ${extracted.amountIn}`,
+      ].join('\n')
+    : '';
+
   return [
     'PORTFOLIO:',
     portfolioBlock,
     '',
     'RECENT CONVERSATION:',
     convoBlock,
+    preCalc,
     '',
     `USER MESSAGE: ${msg}`,
     '',

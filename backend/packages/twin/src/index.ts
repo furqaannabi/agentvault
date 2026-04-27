@@ -10,6 +10,7 @@ import { ethers } from 'ethers';
 import { type TwinConfig, twinConfigFromEnv } from './config.js';
 import { type ComputeClient, makeComputeClient } from './compute.js';
 import { CHAT_PROMPT, INTENT_PROMPT, SANITY_PROMPT, SYSTEM_PROMPT, buildUserPrompt } from './prompt.js';
+import { type KnownToken, extractTrade } from './extract.js';
 import { type ParsedSanity, parseIntent, parseProposal, parseSanity } from './parse.js';
 import { attestInference } from './attest.js';
 
@@ -35,12 +36,19 @@ export interface TwinDeps {
   memory: Memory;
   cfg?: TwinConfig;
   compute?: ComputeClient;
+  knownTokens?: KnownToken[];
 }
+
+const DEFAULT_TOKENS: KnownToken[] = [
+  { symbol: 'USDC', address: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', decimals: 6 },
+  { symbol: 'WETH', address: '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14', decimals: 18 },
+];
 
 export function createTwin(deps: TwinDeps): Twin {
   const cfg = deps.cfg ?? twinConfigFromEnv();
   const compute = deps.compute ?? makeComputeClient(cfg);
   const signer = new ethers.Wallet(cfg.privateKey);
+  const tokens = deps.knownTokens ?? DEFAULT_TOKENS;
 
   return {
     async handle(userId, msg) {
@@ -77,7 +85,9 @@ export function createTwin(deps: TwinDeps): Twin {
       }
 
       // Step 2b: trade proposal
-      const userPrompt = buildUserPrompt(msg, portfolio, convo);
+      const extracted = extractTrade(msg, tokens);
+      if (extracted) console.log(`[twin] extracted: ${extracted.amountIn} ${extracted.symbolIn} → ${extracted.symbolOut}`);
+      const userPrompt = buildUserPrompt(msg, portfolio, convo, extracted);
       const output = await compute.infer(SYSTEM_PROMPT, userPrompt);
       const tCompute = Date.now();
       console.log(`[twin] compute: ${tCompute - tKv}ms`);
