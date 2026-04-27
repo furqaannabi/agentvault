@@ -87,31 +87,67 @@ export function createTwin(deps: TwinDeps): Twin {
       // Step 2b: trade proposal
       const extracted = extractTrade(msg, tokens);
       if (extracted) console.log(`[twin] extracted: ${extracted.amountIn} ${extracted.symbolIn} → ${extracted.symbolOut}`);
-      const userPrompt = buildUserPrompt(msg, portfolio, convo, extracted);
-      const output = await compute.infer(SYSTEM_PROMPT, userPrompt);
-      const tCompute = Date.now();
-      console.log(`[twin] compute: ${tCompute - tKv}ms`);
-      const parsed = parseProposal(output);
+
+      let tokenIn: string;
+      let tokenOut: string;
+      let amountIn: string;
+      let maxSlippageBps: number;
+      let reasoning: string;
+      let promptStr: string;
+      let output: string;
+
+      if (extracted) {
+        // Rule-based fields locked — only ask LLM for reasoning + slippage
+        const reasoningPrompt = `User wants to swap ${extracted.symbolIn} to ${extracted.symbolOut}. Write one sentence of reasoning for this trade and suggest a conservative slippage in bps (default 50, max 100). Return JSON: {"reasoning":"...","maxSlippageBps":<number>}`;
+        output = await compute.infer(
+          'You are a DeFi trade reasoning assistant. Return strict JSON only, no markdown.',
+          reasoningPrompt,
+        );
+        const tCompute = Date.now();
+        console.log(`[twin] compute: ${tCompute - tKv}ms`);
+        let parsed: { reasoning?: string; maxSlippageBps?: number } = {};
+        try { parsed = JSON.parse(output.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')); } catch { /* use defaults */ }
+        tokenIn = extracted.tokenIn;
+        tokenOut = extracted.tokenOut;
+        amountIn = extracted.amountIn;
+        maxSlippageBps = typeof parsed.maxSlippageBps === 'number' && parsed.maxSlippageBps > 0 && parsed.maxSlippageBps <= 1000 ? parsed.maxSlippageBps : 50;
+        reasoning = typeof parsed.reasoning === 'string' && parsed.reasoning.trim() ? parsed.reasoning : `Swapping ${extracted.symbolIn} to ${extracted.symbolOut} as requested.`;
+        promptStr = reasoningPrompt;
+      } else {
+        // Ambiguous message — let LLM decide everything
+        const userPrompt = buildUserPrompt(msg, portfolio, convo, null);
+        output = await compute.infer(SYSTEM_PROMPT, userPrompt);
+        const tCompute = Date.now();
+        console.log(`[twin] compute: ${tCompute - tKv}ms`);
+        const parsed = parseProposal(output);
+        tokenIn = parsed.tokenIn;
+        tokenOut = parsed.tokenOut;
+        amountIn = parsed.amountIn;
+        maxSlippageBps = parsed.maxSlippageBps;
+        reasoning = parsed.reasoning;
+        promptStr = `${SYSTEM_PROMPT}\n\n${userPrompt}`;
+      }
+
       const inference = await attestInference(signer, {
         providerUrl: cfg.computeBaseUrl,
         modelId: cfg.computeModel,
-        prompt: `${SYSTEM_PROMPT}\n\n${userPrompt}`,
+        prompt: promptStr,
         output,
       });
       const proposal: TradeProposal = {
         id: `prop_${randomUUID()}`,
         userId,
         action: 'swap',
-        tokenIn: parsed.tokenIn,
-        tokenOut: parsed.tokenOut,
-        amountIn: parsed.amountIn,
-        maxSlippageBps: parsed.maxSlippageBps,
-        reasoning: parsed.reasoning,
+        tokenIn: tokenIn as `0x${string}`,
+        tokenOut: tokenOut as `0x${string}`,
+        amountIn,
+        maxSlippageBps,
+        reasoning,
         inference,
         createdAt: Date.now(),
       };
       const newTurn: ConvoTurn = { role: 'user', content: msg, ts: Date.now() };
-      const replyTurn: ConvoTurn = { role: 'assistant', content: parsed.reasoning, ts: Date.now() };
+      const replyTurn: ConvoTurn = { role: 'assistant', content: reasoning, ts: Date.now() };
       const updatedConvo: ConvoState = {
         userId,
         turns: [...(convo?.turns ?? []), newTurn, replyTurn],

@@ -9,6 +9,7 @@ export interface MemoryConfig {
   streamState: Hex;
   streamProposal: Hex;
   logNamespace: string;
+  kvEnabled: boolean;
 }
 
 function req(name: string): string {
@@ -27,5 +28,6 @@ export function memoryConfigFromEnv(): MemoryConfig {
     streamState: req('ZG_KV_STREAM_STATE') as Hex,
     streamProposal: req('ZG_KV_STREAM_PROPOSAL') as Hex,
     logNamespace: process.env.ZG_LOG_NAMESPACE ?? 'agentvault',
+    kvEnabled: process.env.ZG_KV_ENABLED === 'true',
   };
 }

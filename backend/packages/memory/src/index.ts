@@ -79,22 +79,23 @@ export function createMemory(cfg: MemoryConfig = memoryConfigFromEnv()): Memory 
   const z: ZgClients = makeClients(cfg);
   const ks = z.cfg.streamState;
   const kp = z.cfg.streamProposal;
+  const kvEnabled = cfg.kvEnabled;
 
-  // Async startup balance check. Each KV write attaches ~0.002 OG; warn if
-  // wallet too low so soft-fails are diagnosed early instead of mid-demo.
-  void z.provider
-    .getBalance(z.signer.address)
-    .then((bal) => {
-      const min = 50_000_000_000_000_000n; // 0.05 OG
-      if (bal < min) {
-        console.warn(
-          `[memory] wallet ${z.signer.address} balance ${bal} wei < 0.05 OG; refill via https://faucet.0g.ai`,
-        );
-      } else {
-        console.log(`[memory] wallet ${z.signer.address} balance ${bal} wei`);
-      }
-    })
-    .catch((e) => console.warn('[memory] balance check failed:', (e as Error).message));
+  if (!kvEnabled) {
+    console.log('[memory] ZG_KV_ENABLED=false — running in-memory only (0g KV disabled)');
+  } else {
+    void z.provider
+      .getBalance(z.signer.address)
+      .then((bal) => {
+        const min = 50_000_000_000_000_000n;
+        if (bal < min) {
+          console.warn(`[memory] wallet ${z.signer.address} balance ${bal} wei < 0.05 OG; refill via https://faucet.0g.ai`);
+        } else {
+          console.log(`[memory] wallet ${z.signer.address} balance ${bal} wei`);
+        }
+      })
+      .catch((e) => console.warn('[memory] balance check failed:', (e as Error).message));
+  }
 
   const portfolios = new Map<string, PortfolioState>();
   const convos = new Map<string, ConvoState>();
@@ -110,6 +111,7 @@ export function createMemory(cfg: MemoryConfig = memoryConfigFromEnv()): Memory 
     async getPortfolio(userId) {
       const u = norm(userId);
       if (portfolios.has(u)) return portfolios.get(u)!;
+      if (!kvEnabled) return null;
       const v = await softRead('getPortfolio', kvGetJson<PortfolioState>(z, ks, `portfolio:${u}`));
       if (v) portfolios.set(u, v);
       return v;
@@ -117,11 +119,12 @@ export function createMemory(cfg: MemoryConfig = memoryConfigFromEnv()): Memory 
     async setPortfolio(s) {
       const u = norm(s.userId);
       portfolios.set(u, s);
-      void softWrite('setPortfolio', kvSetJson(z, ks, `portfolio:${u}`, s));
+      if (kvEnabled) void softWrite('setPortfolio', kvSetJson(z, ks, `portfolio:${u}`, s));
     },
     async getConvo(userId) {
       const u = norm(userId);
       if (convos.has(u)) return convos.get(u)!;
+      if (!kvEnabled) return null;
       const v = await softRead('getConvo', kvGetJson<ConvoState>(z, ks, `convo:${u}`));
       if (v) convos.set(u, v);
       return v;
@@ -129,11 +132,12 @@ export function createMemory(cfg: MemoryConfig = memoryConfigFromEnv()): Memory 
     async setConvo(s) {
       const u = norm(s.userId);
       convos.set(u, s);
-      void softWrite('setConvo', kvSetJson(z, ks, `convo:${u}`, s));
+      if (kvEnabled) void softWrite('setConvo', kvSetJson(z, ks, `convo:${u}`, s));
     },
     async getProposal(user, id) {
       const k = proposalKey(user, id);
       if (proposals.has(k)) return proposals.get(k)!;
+      if (!kvEnabled) return null;
       const v = await softRead('getProposal', kvGetJson<TradeProposal>(z, kp, `proposal:${k}`));
       if (v) proposals.set(k, v);
       return v;
@@ -141,22 +145,26 @@ export function createMemory(cfg: MemoryConfig = memoryConfigFromEnv()): Memory 
     async setProposal(p) {
       const k = proposalKey(p.userId, p.id);
       proposals.set(k, p);
-      void softWrite('setProposal', kvSetJson(z, kp, `proposal:${k}`, p));
+      if (kvEnabled) void softWrite('setProposal', kvSetJson(z, kp, `proposal:${k}`, p));
     },
     async getProof(user, id) {
       const k = proofKey(user, id);
       if (proofs.has(k)) return proofs.get(k)!;
+      if (!kvEnabled) return null;
       const v = await softRead('getProof', kvGetJson<Proof>(z, kp, `proof:${k}`));
       if (v) proofs.set(k, v);
       return v;
     },
     async setProof(p) {
-      // Proof embeds the proposal which carries userId — single source of truth.
       const k = proofKey(p.proposal.userId, p.proposalId);
       proofs.set(k, p);
-      void softWrite('setProof', kvSetJson(z, kp, `proof:${k}`, p));
+      if (kvEnabled) void softWrite('setProof', kvSetJson(z, kp, `proof:${k}`, p));
     },
     async appendLog(entry) {
+      const json = JSON.stringify(entry);
+      const syntheticCid = `0x${createHash('sha256').update(json).digest('hex')}`;
+      const syntheticResult = { rootHash: syntheticCid, txHash: '0x0000000000000000000000000000000000000000000000000000000000000000' as const };
+
       const ms = 12_000;
       let timer: NodeJS.Timeout | undefined;
       try {
@@ -167,15 +175,11 @@ export function createMemory(cfg: MemoryConfig = memoryConfigFromEnv()): Memory 
           }),
         ]);
       } catch (e) {
-        // Soft-fail to a synthetic CID so anchor + proof flow continue.
-        // CID = sha256(canonical(entry)) — deterministic, recoverable later if KV recovers.
-        const json = JSON.stringify(entry);
-        const cid = `0x${createHash('sha256').update(json).digest('hex')}`;
         console.warn(
-          `[memory:appendLog] soft-fail (using synthetic CID ${cid.slice(0, 18)}…):`,
+          `[memory:appendLog] soft-fail (using synthetic CID ${syntheticCid.slice(0, 18)}…):`,
           (e as Error).message.split('\n')[0],
         );
-        return { rootHash: cid, txHash: '0x0000000000000000000000000000000000000000000000000000000000000000' };
+        return syntheticResult;
       } finally {
         if (timer) clearTimeout(timer);
       }
