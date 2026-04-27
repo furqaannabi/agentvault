@@ -32,15 +32,23 @@ async function authedFetch(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
-  const auth = getAuthHeader()
-  const res = await fetch(`${API_BASE}${path}`, {
+  // Wrap fetch so network-level failures (ERR_EMPTY_RESPONSE, ECONNRESET, etc.)
+  // produce a readable message instead of a generic "Failed to fetch"
+  const doFetch = () => fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      Authorization:  auth,
+      Authorization:  getAuthHeader(),
       ...init.headers,
     },
+  }).catch((err: Error) => {
+    const msg = err.message ?? ''
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+      throw new Error('Server closed the connection — the request may have timed out or the server crashed. Try a smaller amount.')
+    }
+    throw err
   })
+  const res = await doFetch()
 
   if (res.status === 401) {
     const body = await res.json().catch(() => ({}))
