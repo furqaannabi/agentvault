@@ -69,6 +69,7 @@ const allowedTokens = parseAllowedTokens(process.env.ALLOWED_TOKENS);
 app.use('/chat', sessions.middleware);
 app.use('/approve', sessions.middleware);
 app.use('/proof/*', sessions.middleware);
+app.use('/proofs', sessions.middleware);
 app.use('/portfolio', sessions.middleware);
 app.use('/session', sessions.middleware);
 app.use('/session/*', sessions.middleware);
@@ -88,7 +89,7 @@ if (process.env.SEPOLIA_RPC_URL) {
 }
 
 const port = Number(process.env.PORT ?? 8787);
-serve({ fetch: app.fetch, port }, (info) => {
+serve({ fetch: app.fetch, port, serverOptions: { requestTimeout: 120_000 } }, (info) => {
   console.log(`agentvault-api listening on http://localhost:${info.port}`);
   console.log(`EXEC_MODE=${process.env.EXEC_MODE ?? 'mock'}`);
 });

@@ -22,6 +22,7 @@ export interface Memory {
   getProposal(user: string, id: string): Promise<TradeProposal | null>;
   setProposal(proposal: TradeProposal): Promise<void>;
   getProof(user: string, id: string): Promise<Proof | null>;
+  getProofs(user: string): Promise<Proof[]>;
   setProof(proof: Proof): Promise<void>;
   // Log: immutable history
   appendLog<T>(entry: T): Promise<LogAppendResult>;
@@ -154,6 +155,13 @@ export function createMemory(cfg: MemoryConfig = memoryConfigFromEnv()): Memory 
       const v = await softRead('getProof', kvGetJson<Proof>(z, kp, `proof:${k}`));
       if (v) proofs.set(k, v);
       return v;
+    },
+    async getProofs(user) {
+      const u = norm(user);
+      return [...proofs.entries()]
+        .filter(([k]) => k.startsWith(`${u}:`))
+        .map(([, v]) => v)
+        .sort((a, b) => b.createdAt - a.createdAt);
     },
     async setProof(p) {
       const k = proofKey(p.proposal.userId, p.proposalId);
