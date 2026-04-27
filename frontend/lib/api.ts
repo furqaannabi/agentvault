@@ -168,7 +168,15 @@ export async function approveProposal(proposalId: string): Promise<Proof> {
 }
 
 export async function getProof(id: string): Promise<Proof> {
-  const res = await authedFetch(`/proof/${id}`)
+  const res  = await authedFetch(`/proof/${id}`)
   if (!res.ok) throw new Error(`GET /proof/${id} failed: ${res.status}`)
-  return safeJson<Proof>(res)
+  const data = await safeJson<{ proof: Proof }>(res)
+  return data.proof
+}
+
+export async function getProofs(): Promise<Proof[]> {
+  const res  = await authedFetch('/proofs')
+  if (!res.ok) throw new Error(`GET /proofs failed: ${res.status}`)
+  const data = await safeJson<{ proofs: Proof[] }>(res)
+  return data.proofs ?? []
 }
