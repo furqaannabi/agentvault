@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useEffect } from 'react'
-import { motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { useSessionStore } from '@/lib/store/sessionStore'
 
@@ -42,7 +41,7 @@ export function AuthGate({ children }: AuthGateProps) {
           AgentVault
         </div>
 
-        {/* Pulsing cursor — same as chat stream indicator */}
+        {/* Pulsing cursor — CSS animation fires before Framer Motion hydrates */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
           <span style={{
             fontFamily:    'var(--font-mono)',
@@ -53,19 +52,18 @@ export function AuthGate({ children }: AuthGateProps) {
           }}>
             INITIALIZING
           </span>
-          <motion.span
+          <span
             aria-hidden
-            animate={{ opacity: [1, 0, 1] }}
-            transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize:   'var(--text-base)',
               color:      'var(--color-text-primary)',
               lineHeight: 1,
+              animation:  'cursor-blink 0.8s linear infinite',
             }}
           >
             ▊
-          </motion.span>
+          </span>
         </div>
       </div>
     )
