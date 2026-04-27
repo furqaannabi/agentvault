@@ -25,11 +25,11 @@ body {
 
 
 /* Subtle scrollbars */
-::-webkit-scrollbar        { width: 3px; height: 3px; }
+::-webkit-scrollbar        { width: 2px; height: 2px; }
 ::-webkit-scrollbar-track  { background: transparent; }
-::-webkit-scrollbar-thumb  { background: var(--color-border); }
-::-webkit-scrollbar-thumb:hover { background: var(--color-border-strong); }
-* { scrollbar-width: thin; scrollbar-color: var(--color-border) transparent; }
+::-webkit-scrollbar-thumb  { background: var(--color-bg-elevated); }
+::-webkit-scrollbar-thumb:hover { background: var(--color-border); }
+* { scrollbar-width: thin; scrollbar-color: var(--color-bg-elevated) transparent; }
 
 /* Chrome, Safari, Edge, Opera */
 input::-webkit-outer-spin-button,
