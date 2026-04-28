@@ -4,6 +4,8 @@ export interface MemoryConfig {
   rpcUrl: string;
   privateKey: Hex;
   indexerEndpoint: string;
+  /** Optional fallback indexer (e.g. standard) used when primary (turbo) Flow.submit reverts. */
+  indexerEndpointFallback?: string;
   kvReadEndpoint: string;
   flowContract: Hex;
   streamState: Hex;
@@ -23,6 +25,7 @@ export function memoryConfigFromEnv(): MemoryConfig {
     rpcUrl: req('ZG_RPC_URL'),
     privateKey: req('ZG_PRIVATE_KEY') as Hex,
     indexerEndpoint: req('ZG_INDEXER_ENDPOINT'),
+    indexerEndpointFallback: process.env.ZG_INDEXER_ENDPOINT_FALLBACK || undefined,
     kvReadEndpoint: req('ZG_KV_READ_ENDPOINT'),
     flowContract: req('ZG_FLOW_CONTRACT') as Hex,
     streamState: req('ZG_KV_STREAM_STATE') as Hex,

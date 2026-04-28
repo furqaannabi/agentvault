@@ -52,7 +52,7 @@ async function softRead<T>(label: string, p: Promise<T>, ms = 8_000): Promise<T 
   }
 }
 
-async function softWrite(label: string, p: Promise<unknown>, ms = 12_000): Promise<void> {
+async function softWrite(label: string, p: Promise<unknown>, ms = 60_000): Promise<void> {
   let timer: NodeJS.Timeout | undefined;
   try {
     await Promise.race([
@@ -66,6 +66,52 @@ async function softWrite(label: string, p: Promise<unknown>, ms = 12_000): Promi
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+/**
+ * Single-wallet nonce serializer. 0G writes all originate from the same
+ * ZG_PRIVATE_KEY signer, so concurrent in-flight txs collide at the mempool
+ * with "replacement fee too low". Funnel every write factory through this
+ * chain so nonces increment cleanly. Each enqueued task only runs after the
+ * prior one fully settles (success or fail) — so the chain advance is tied
+ * to the *actual* underlying work, not to the caller-facing softWrite
+ * timeout. Otherwise a 60s caller timeout could resolve while the on-chain
+ * tx is still pending, freeing the next factory to fire and collide nonces
+ * again. Errors are swallowed so a flaky write doesn't block the queue.
+ */
+interface WriteQueue {
+  /** Fire-and-forget: schedule a write, observe via softWrite timeout, swallow errors. */
+  enqueue(label: string, factory: () => Promise<unknown>): void;
+  /** Awaitable: schedule a write and return its result (or throw). Caller decides timeout. */
+  enqueueAwaitable<T>(factory: () => Promise<T>): Promise<T>;
+}
+
+function makeWriteQueue(): WriteQueue {
+  let tail: Promise<void> = Promise.resolve();
+  function chain<T>(factory: () => Promise<T>, onErr: (e: Error) => void): Promise<T> {
+    // Run factory only after prior settles. Chain advance is tied to the
+    // *actual* underlying work, never to a caller-side timeout, otherwise a
+    // 60s caller timeout could resolve while the on-chain tx is still pending,
+    // freeing the next factory to fire and collide nonces again.
+    const work = tail.then(() => factory());
+    tail = work.then(
+      () => {},
+      (e: Error) => onErr(e),
+    );
+    return work;
+  }
+  return {
+    enqueue(label, factory) {
+      const work = chain(factory, (e) =>
+        console.warn(`[memory:${label}] queued write error:`, e.message),
+      );
+      void softWrite(label, work);
+    },
+    enqueueAwaitable(factory) {
+      // No swallow on chain — caller wants the real result/error.
+      return chain(factory, () => {});
+    },
+  };
 }
 
 /**
@@ -103,6 +149,10 @@ export function createMemory(cfg: MemoryConfig = memoryConfigFromEnv()): Memory 
   const proposals = new Map<string, TradeProposal>();
   const proofs = new Map<string, Proof>();
 
+  // Serialize all on-chain writes from the single ZG signer to avoid nonce
+  // collisions (manifests as "replacement fee too low"). Reads are unaffected.
+  const enqueue = makeWriteQueue();
+
   // All keys lowercased so an addr collision (mixed-case checksum) can't split state.
   const norm = (u: string) => u.toLowerCase();
   const proposalKey = (user: string, id: string) => `${norm(user)}:${id}`;
@@ -120,7 +170,7 @@ export function createMemory(cfg: MemoryConfig = memoryConfigFromEnv()): Memory 
     async setPortfolio(s) {
       const u = norm(s.userId);
       portfolios.set(u, s);
-      if (kvEnabled) void softWrite('setPortfolio', kvSetJson(z, ks, `portfolio:${u}`, s));
+      if (kvEnabled) enqueue.enqueue('setPortfolio', () => kvSetJson(z, ks, `portfolio:${u}`, s));
     },
     async getConvo(userId) {
       const u = norm(userId);
@@ -133,7 +183,7 @@ export function createMemory(cfg: MemoryConfig = memoryConfigFromEnv()): Memory 
     async setConvo(s) {
       const u = norm(s.userId);
       convos.set(u, s);
-      if (kvEnabled) void softWrite('setConvo', kvSetJson(z, ks, `convo:${u}`, s));
+      if (kvEnabled) enqueue.enqueue('setConvo', () => kvSetJson(z, ks, `convo:${u}`, s));
     },
     async getProposal(user, id) {
       const k = proposalKey(user, id);
@@ -146,7 +196,7 @@ export function createMemory(cfg: MemoryConfig = memoryConfigFromEnv()): Memory 
     async setProposal(p) {
       const k = proposalKey(p.userId, p.id);
       proposals.set(k, p);
-      if (kvEnabled) void softWrite('setProposal', kvSetJson(z, kp, `proposal:${k}`, p));
+      if (kvEnabled) enqueue.enqueue('setProposal', () => kvSetJson(z, kp, `proposal:${k}`, p));
     },
     async getProof(user, id) {
       const k = proofKey(user, id);
@@ -166,18 +216,18 @@ export function createMemory(cfg: MemoryConfig = memoryConfigFromEnv()): Memory 
     async setProof(p) {
       const k = proofKey(p.proposal.userId, p.proposalId);
       proofs.set(k, p);
-      if (kvEnabled) void softWrite('setProof', kvSetJson(z, kp, `proof:${k}`, p));
+      if (kvEnabled) enqueue.enqueue('setProof', () => kvSetJson(z, kp, `proof:${k}`, p));
     },
     async appendLog(entry) {
       const json = JSON.stringify(entry);
       const syntheticCid = `0x${createHash('sha256').update(json).digest('hex')}`;
       const syntheticResult = { rootHash: syntheticCid, txHash: '0x0000000000000000000000000000000000000000000000000000000000000000' as const };
 
-      const ms = 12_000;
+      const ms = 60_000;
       let timer: NodeJS.Timeout | undefined;
       try {
         return await Promise.race([
-          logAppend(z, entry),
+          enqueue.enqueueAwaitable(() => logAppend(z, entry)),
           new Promise<never>((_, rej) => {
             timer = setTimeout(() => rej(new Error(`appendLog timeout ${ms}ms`)), ms);
           }),
