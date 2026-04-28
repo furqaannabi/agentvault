@@ -3,7 +3,7 @@ import {
   EIP712_DOMAIN_VERSION,
   EIP712_TYPES,
 } from '@agentvault/policy';
-import type { Hex } from '@agentvault/types';
+import type { ExecMode, Hex } from '@agentvault/types';
 import { Hono } from 'hono';
 
 export interface PublicTokenInfo {
@@ -12,16 +12,42 @@ export interface PublicTokenInfo {
   decimals: number;
 }
 
+export type ExecutionLayer = 'mock' | 'direct' | 'keeperhub';
+
 export interface ConfigRouteOpts {
   delegate: Hex;
   chainId: number;
   allowedTokens: PublicTokenInfo[];
+  /** Drives the public executionLayer label. */
+  execMode: ExecMode;
+}
+
+/**
+ * Map internal ExecMode → public executionLayer label.
+ *  - mock      → "mock"
+ *  - real      → "direct" (raw ethers + Uniswap UR)
+ *  - keeperhub → "keeperhub"
+ */
+export function executionLayerOf(mode: ExecMode): ExecutionLayer {
+  switch (mode) {
+    case 'mock':
+      return 'mock';
+    case 'real':
+      return 'direct';
+    case 'keeperhub':
+      return 'keeperhub';
+    default: {
+      const _exhaustive: never = mode;
+      throw new Error(`unknown ExecMode ${String(_exhaustive)}`);
+    }
+  }
 }
 
 /**
  * GET /config — public endpoint FE reads on boot to learn the EIP-712 domain,
  * the delegate address users must encode in their session, the active chainId,
- * and the canonical token list FE renders in onboarding.
+ * the canonical token list FE renders in onboarding, and the active execution
+ * layer + chainId for the trust badge (PRD FR-5).
  */
 export function configRoute(opts: ConfigRouteOpts) {
   const app = new Hono();
@@ -29,6 +55,7 @@ export function configRoute(opts: ConfigRouteOpts) {
     c.json({
       delegate: opts.delegate,
       chainId: opts.chainId,
+      executionLayer: executionLayerOf(opts.execMode),
       eip712Domain: {
         name: EIP712_DOMAIN_NAME,
         version: EIP712_DOMAIN_VERSION,

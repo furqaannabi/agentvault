@@ -74,7 +74,10 @@ app.use('/portfolio', sessions.middleware);
 app.use('/session', sessions.middleware);
 app.use('/session/*', sessions.middleware);
 
-app.route('/', configRoute({ delegate: delegateAddr, chainId, allowedTokens }));
+app.route(
+  '/',
+  configRoute({ delegate: delegateAddr, chainId, allowedTokens, execMode: deps.execMode }),
+);
 app.route('/', sessionRoute(sessions));
 app.route('/', chatRoute(deps));
 app.route('/', approveRoute(deps));

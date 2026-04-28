@@ -2,7 +2,7 @@ import { type ExecAdapter, createExecAdapter } from '@agentvault/exec';
 import { DEFAULT_POLICY, createPolicy, type PolicyContext } from '@agentvault/policy';
 import { createProofPipeline } from '@agentvault/proof';
 import { createTwin } from '@agentvault/twin';
-import type { ExecResult, ExecSwapInput, Hex, SignedSession } from '@agentvault/types';
+import type { ExecMode, ExecResult, ExecSwapInput, Hex, SignedSession } from '@agentvault/types';
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
 import { createSessionStore } from '../src/middleware/session.js';
@@ -38,12 +38,32 @@ function buildTestApp(opts?: {
   proposalJson?: string;
   sanityJson?: string;
   exec?: ExecAdapter;
+  execMode?: ExecMode;
+  /**
+   * If true, the fake compute client returns sanity JSON for every call. Used
+   * by tests that bypass /chat and inject a proposal directly into memory —
+   * those tests only ever invoke the sanity-check leg of the LLM flow.
+   */
+  alwaysReturnSanity?: boolean;
 }) {
   const memory = fakeMemory();
-  const compute = fakeComputeClient({
-    proposal: opts?.proposalJson ?? validProposalJson,
-    sanity: opts?.sanityJson ?? validSanityJson,
-  });
+  const compute = opts?.alwaysReturnSanity
+    ? {
+        cfg: {
+          privateKey: ('0x' + 'a'.repeat(64)) as Hex,
+          computeBaseUrl: 'https://fake.compute/v1/proxy',
+          computeApiKey: 'fake',
+          computeModel: 'fake-model',
+          computeProviderAddr: ('0x' + '1'.repeat(40)) as Hex,
+        },
+        async infer() {
+          return opts?.sanityJson ?? validSanityJson;
+        },
+      }
+    : fakeComputeClient({
+        proposal: opts?.proposalJson ?? validProposalJson,
+        sanity: opts?.sanityJson ?? validSanityJson,
+      });
   const twin = createTwin({ memory, cfg: compute.cfg, compute });
   const policy = createPolicy({ twin, signerKey: FIXED_KEY });
   const exec = opts?.exec ?? createExecAdapter({ mode: 'mock' });
@@ -65,12 +85,20 @@ function buildTestApp(opts?: {
   app.use('/proof/*', sessions.middleware);
   app.use('/session', sessions.middleware);
   app.use('/session/*', sessions.middleware);
-  app.route('/', configRoute({ delegate: testDelegateAddr(), chainId: TEST_CHAIN_ID, allowedTokens: [] }));
+  app.route(
+    '/',
+    configRoute({
+      delegate: testDelegateAddr(),
+      chainId: TEST_CHAIN_ID,
+      allowedTokens: [],
+      execMode: opts?.execMode ?? 'mock',
+    }),
+  );
   app.route('/', sessionRoute(sessions));
   app.route('/', chatRoute(deps));
   app.route('/', approveRoute(deps));
   app.route('/', proofRoute(deps));
-  return { app, sessions };
+  return { app, sessions, memory };
 }
 
 async function postJson(app: Hono, path: string, body: unknown, signed?: SignedSession) {
@@ -259,6 +287,127 @@ describe('e2e: chat → approve → proof', () => {
     expect(body.error).toBe('exec_failed');
     expect(body.exec.error).toMatch(/allowance/);
     expect(body.exec.error).toMatch(/re-approve/);
+  });
+
+  it('GET /config exposes executionLayer=keeperhub when configured (FR-5)', async () => {
+    const { app } = buildTestApp({ execMode: 'keeperhub' });
+    const r = await app.request('/config');
+    expect(r.status).toBe(200);
+    const body = (await r.json()) as { executionLayer: string; chainId: number };
+    expect(body.executionLayer).toBe('keeperhub');
+    expect(body.chainId).toBe(TEST_CHAIN_ID);
+  });
+
+  // KeeperHub-mode tests inject a proposal directly into memory so they don't
+  // depend on the LLM-driven /chat path (that path is exercised by other tests).
+  async function seedProposal(memory: ReturnType<typeof fakeMemory>, userId: string) {
+    const id = `prop_kh_${Math.random().toString(36).slice(2, 10)}`;
+    await memory.setProposal({
+      id,
+      userId,
+      action: 'swap',
+      tokenIn: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
+      tokenOut: '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14',
+      amountIn: '500000000',
+      maxSlippageBps: 50,
+      reasoning: 'rebalance from stables to ETH',
+      inference: {
+        providerUrl: 'https://fake.compute/v1/proxy',
+        modelId: 'fake-model',
+        promptHash: ('0x' + '0'.repeat(64)) as Hex,
+        outputHash: ('0x' + '0'.repeat(64)) as Hex,
+        ts: Date.now(),
+        ourSig: ('0x' + '0'.repeat(130)) as Hex,
+        signer: ('0x' + '1'.repeat(40)) as Hex,
+      },
+      createdAt: Date.now(),
+    });
+    return id;
+  }
+
+  it('approve folds keeperhub block into proof.exec on success (FR-3)', async () => {
+    const khExec: ExecAdapter = {
+      async swap(input: ExecSwapInput): Promise<ExecResult> {
+        return {
+          proposalId: input.proposal.id,
+          txHash: ('0x' + 'aa'.repeat(32)) as Hex,
+          blockNumber: 5_555_555,
+          amountOut: '180000000000000000',
+          gasUsed: '150000',
+          status: 'success',
+          chainId: TEST_CHAIN_ID,
+          keeperhub: {
+            jobId: 'direct_demo_e2e',
+            auditTrailUrl: 'https://app.keeperhub.com/executions/direct_demo_e2e',
+            attempts: 2,
+            finalTxHash: ('0x' + 'aa'.repeat(32)) as Hex,
+            finalGasUsed: '150000',
+            status: 'success',
+            network: 'sepolia',
+          },
+        };
+      },
+    };
+    const { app, memory } = buildTestApp({
+      exec: khExec,
+      execMode: 'keeperhub',
+      alwaysReturnSanity: true,
+    });
+    const signed = await fakeSignedSession();
+    const proposalId = await seedProposal(memory, testUserAddr().toLowerCase());
+    const r = await postJson(app, '/approve', { proposalId }, signed);
+    expect(r.status).toBe(200);
+    const proof = (r.body as { proof: { exec: { keeperhub?: { jobId: string; attempts: number; auditTrailUrl: string } } } }).proof;
+    expect(proof.exec.keeperhub).toBeTruthy();
+    expect(proof.exec.keeperhub!.jobId).toBe('direct_demo_e2e');
+    expect(proof.exec.keeperhub!.attempts).toBe(2);
+    expect(proof.exec.keeperhub!.auditTrailUrl).toMatch(/keeperhub\.com/);
+  });
+
+  it('approve surfaces keeperhubAuditUrl on exec failure (FR-4)', async () => {
+    const failExec: ExecAdapter = {
+      async swap(input: ExecSwapInput): Promise<ExecResult> {
+        return {
+          proposalId: input.proposal.id,
+          txHash: ('0x' + '0'.repeat(64)) as Hex,
+          blockNumber: 0,
+          amountOut: '0',
+          gasUsed: '0',
+          status: 'reverted',
+          error: 'keeperhub failed: tx reverted: STF',
+          chainId: TEST_CHAIN_ID,
+          keeperhub: {
+            jobId: 'direct_demo_fail',
+            auditTrailUrl: 'https://app.keeperhub.com/executions/direct_demo_fail',
+            attempts: 3,
+            finalTxHash: ('0x' + 'ff'.repeat(32)) as Hex,
+            finalGasUsed: '21000',
+            status: 'failed',
+            network: 'sepolia',
+            error: 'tx reverted: STF',
+          },
+        };
+      },
+    };
+    const { app, memory } = buildTestApp({
+      exec: failExec,
+      execMode: 'keeperhub',
+      alwaysReturnSanity: true,
+    });
+    const signed = await fakeSignedSession();
+    const proposalId = await seedProposal(memory, testUserAddr().toLowerCase());
+    const r = await postJson(app, '/approve', { proposalId }, signed);
+    expect(r.status).toBe(502);
+    const body = r.body as {
+      error: string;
+      keeperhubAuditUrl: string;
+      lastRevertReason: string;
+      exec: { keeperhub: { auditTrailUrl: string; status: string } };
+    };
+    expect(body.error).toBe('exec_failed');
+    expect(body.keeperhubAuditUrl).toMatch(/keeperhub\.com/);
+    expect(body.lastRevertReason).toMatch(/STF/);
+    expect(body.exec.keeperhub.status).toBe('failed');
   });
 
   it('DELETE /session revokes the nonce; subsequent calls 401', async () => {

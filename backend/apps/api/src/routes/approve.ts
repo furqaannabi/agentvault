@@ -49,7 +49,23 @@ export function approveRoute(deps: AppDeps) {
 
       const exec = await deps.exec.swap({ proposal, verdict, user: session.user });
       if (exec.status !== 'success') {
-        return c.json({ error: 'exec_failed', exec, verdict }, 502);
+        // Surface KeeperHub audit URL + last revert reason on failure (PRD FR-4)
+        // so the verifier UI can link to KH's independent record even when the
+        // trade did not settle.
+        return c.json(
+          {
+            error: 'exec_failed',
+            exec,
+            verdict,
+            ...(exec.keeperhub
+              ? {
+                  keeperhubAuditUrl: exec.keeperhub.auditTrailUrl,
+                  lastRevertReason: exec.keeperhub.error ?? exec.error ?? null,
+                }
+              : {}),
+          },
+          502,
+        );
       }
 
       const proof = await deps.proof.assemble({

@@ -1,5 +1,5 @@
 {
-  "name": "@agentvault/exec",
+  "name": "@agentvault/keeperhub",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,13 +14,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@agentvault/keeperhub": "workspace:*",
-    "@agentvault/mocks": "workspace:*",
     "@agentvault/types": "workspace:*",
-    "@agentvault/uniswap-api": "workspace:*",
     "ethers": "6.13.1"
   },
   "devDependencies": {
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0"
   }
 }

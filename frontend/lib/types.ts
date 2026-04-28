@@ -28,12 +28,16 @@ export interface PublicTokenInfo {
   decimals: number
 }
 
+export type ExecutionLayer = 'mock' | 'direct' | 'keeperhub'
+
 export interface Config {
-  delegate:       Hex
-  chainId:        number
-  eip712Domain:   Record<string, unknown>
-  eip712Types:    Record<string, unknown>
-  allowedTokens:  PublicTokenInfo[]
+  delegate:        Hex
+  chainId:         number
+  /** Active execution layer. Optional for older backends. */
+  executionLayer?: ExecutionLayer
+  eip712Domain:    Record<string, unknown>
+  eip712Types:     Record<string, unknown>
+  allowedTokens:   PublicTokenInfo[]
 }
 
 // ── Portfolio ─────────────────────────────────────────────────────────────────
@@ -82,6 +86,22 @@ export interface PolicyVerdict {
 
 // ── Execution ─────────────────────────────────────────────────────────────────
 
+/**
+ * KeeperHub execution audit block — present on ExecResult when the trade
+ * settled through the KeeperHub Direct Execution layer. Surfaced into the
+ * proof so verifiers can click through to KeeperHub's independent audit URL.
+ */
+export interface KeeperhubExecution {
+  jobId:         string
+  auditTrailUrl: string
+  attempts:      number
+  finalTxHash:   Hex
+  finalGasUsed:  string
+  status:        'success' | 'failed' | 'timeout'
+  network:       'sepolia'
+  error?:        string
+}
+
 export interface ExecResult {
   txHash:      Hex
   blockNumber: number
@@ -89,6 +109,7 @@ export interface ExecResult {
   gasUsed:     string
   status:      'success' | 'failed' | 'reverted'
   chainId:     number
+  keeperhub?:  KeeperhubExecution
 }
 
 // ── Proof ─────────────────────────────────────────────────────────────────────

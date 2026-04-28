@@ -50,4 +50,40 @@ describe('computeRoot', () => {
     const r2 = computeRoot(p, v, mockExecResult({ amountOut: '2' }));
     expect(r1).not.toBe(r2);
   });
+  it('changes when ExecResult.keeperhub block is added (PRD FR-3 binding)', () => {
+    const p = mockProposal();
+    const v = mockVerdict();
+    const base = mockExecResult();
+    const withKh = mockExecResult({
+      keeperhub: {
+        jobId: 'direct_demo_1',
+        auditTrailUrl: 'https://app.keeperhub.com/executions/direct_demo_1',
+        attempts: 2,
+        finalTxHash: ('0x' + 'a'.repeat(64)) as `0x${string}`,
+        finalGasUsed: '150000',
+        status: 'success',
+        network: 'sepolia',
+      },
+    });
+    expect(computeRoot(p, v, base)).not.toBe(computeRoot(p, v, withKh));
+  });
+  it('changes when keeperhub.attempts changes (retry count is bound to proof)', () => {
+    const p = mockProposal();
+    const v = mockVerdict();
+    const e1 = mockExecResult({
+      keeperhub: {
+        jobId: 'direct_demo_2',
+        auditTrailUrl: 'https://app.keeperhub.com/executions/direct_demo_2',
+        attempts: 1,
+        finalTxHash: ('0x' + 'b'.repeat(64)) as `0x${string}`,
+        finalGasUsed: '150000',
+        status: 'success',
+        network: 'sepolia',
+      },
+    });
+    const e2 = mockExecResult({
+      keeperhub: { ...e1.keeperhub!, attempts: 2 },
+    });
+    expect(computeRoot(p, v, e1)).not.toBe(computeRoot(p, v, e2));
+  });
 });

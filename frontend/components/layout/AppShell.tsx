@@ -1,13 +1,15 @@
 'use client'
 
-import React, { useState, createContext, useContext, useCallback } from 'react'
+import React, { useState, createContext, useContext, useCallback, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Label, Mono } from '@/components/design-system/Typography'
+import { Badge } from '@/components/design-system/Badge'
 import { useChatStore } from '@/lib/store/chatStore'
 import { useSessionStore } from '@/lib/store/sessionStore'
-import { deleteSession } from '@/lib/api'
+import { deleteSession, getConfig } from '@/lib/api'
+import type { ExecutionLayer } from '@/lib/types'
 
 
 // ── Drawer context ─────────────────────────────────────────────────────────────
@@ -359,10 +361,52 @@ const PAGE_TITLES: Record<string, string> = {
   '/proof':  'PROOF EXPLORER',
 }
 
+function chainLabel(chainId: number): string {
+  if (chainId === 11155111) return 'Sepolia'
+  if (chainId === 1)        return 'Mainnet'
+  if (chainId === 84532)    return 'Base Sepolia'
+  return `chain ${chainId}`
+}
+
+function executionBadgeLabel(layer: ExecutionLayer | undefined, chainId: number): string {
+  const chain = chainLabel(chainId)
+  switch (layer) {
+    case 'keeperhub': return `KEEPERHUB · ${chain.toUpperCase()}`
+    case 'direct':    return `DIRECT · ${chain.toUpperCase()}`
+    case 'mock':      return `MOCK · ${chain.toUpperCase()}`
+    default:          return `EXEC · ${chain.toUpperCase()}`
+  }
+}
+
+function executionBadgeVariant(layer: ExecutionLayer | undefined): 'signed' | 'verified' | 'pending' {
+  // Blue for KeeperHub-routed (independent audit), green for direct (we ourselves
+  // own the broadcast), amber for mock so demo viewers don't confuse it with real.
+  if (layer === 'keeperhub') return 'signed'
+  if (layer === 'direct')    return 'verified'
+  return 'pending'
+}
+
 function TopBar() {
   const pathname = usePathname()
   const base     = '/' + pathname.split('/')[1]
   const title    = PAGE_TITLES[base] ?? 'AGENTVAULT'
+
+  const [layer, setLayer]     = useState<ExecutionLayer | undefined>(undefined)
+  const [chainId, setChainId] = useState<number>(11155111)
+
+  useEffect(() => {
+    let cancelled = false
+    getConfig()
+      .then((cfg) => {
+        if (cancelled) return
+        setLayer(cfg.executionLayer)
+        setChainId(cfg.chainId)
+      })
+      .catch(() => {
+        // /config unreachable — leave default badge.
+      })
+    return () => { cancelled = true }
+  }, [])
 
   return (
     <header
@@ -382,10 +426,17 @@ function TopBar() {
         {title}
       </Label>
 
-      {/* Right actions slot — version tag */}
-      <Mono size="xs" color="secondary" as="span">
-        ProofTwin · V.2.4.0
-      </Mono>
+      {/* Right actions: execution-layer badge + version tag */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+        <Badge
+          variant={executionBadgeVariant(layer)}
+          size="sm"
+          label={executionBadgeLabel(layer, chainId)}
+        />
+        <Mono size="xs" color="secondary" as="span">
+          ProofTwin · V.2.4.0
+        </Mono>
+      </div>
     </header>
   )
 }

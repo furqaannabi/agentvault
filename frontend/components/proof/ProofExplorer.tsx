@@ -21,7 +21,7 @@ function proofToSteps(proof: Proof): ProofStep[] {
   const passCount = proof.verdict.rules.filter((r) => r.pass).length
   const total     = proof.verdict.rules.length
 
-  return [
+  const steps: ProofStep[] = [
     {
       index:  0,
       label:  'TWIN_REASONING',
@@ -46,31 +46,53 @@ function proofToSteps(proof: Proof): ProofStep[] {
       status: proof.verdict.ok ? 'verified' as const : 'failed' as const,
       detail: `${passCount}/${total} rules passed. ${proof.verdict.ok ? 'Trade cleared.' : 'Trade blocked.'}`,
     },
-    {
-      index:       3,
-      label:       'SWAP_EXECUTION',
-      hash:        proof.exec.txHash,
-      status:      proof.exec.status === 'success' ? 'verified' : 'failed',
-      verifierUrl: explorerUrl(proof.exec.txHash, proof.exec.chainId),
-      detail:      `Block ${proof.exec.blockNumber} · Received ${proof.exec.amountOut} · Gas ${proof.exec.gasUsed}`,
-    },
-    {
-      index:       4,
-      label:       'ON_CHAIN_ANCHOR',
-      hash:        proof.anchorTx,
-      status:      'verified',
-      verifierUrl: `https://chainscan-galileo.0g.ai/tx/${proof.anchorTx}`,
-      detail:      `Merkle root anchored on 0G Chain (chainId ${proof.anchorChainId}).`,
-    },
-    {
-      index:       5,
-      label:       'STORAGE_LOG',
-      hash:        proof.logCid,
-      status:      'verified',
-      verifierUrl: `https://storagescan.0g.ai/object/${proof.logCid}`,
-      detail:      'Immutable decision record in 0G Storage Log.',
-    },
   ]
+
+  // Optional KeeperHub audit step inserted before swap execution when present.
+  if (proof.exec.keeperhub) {
+    const kh = proof.exec.keeperhub
+    const khStatus: ProofStep['status'] =
+      kh.status === 'success' ? 'verified' : kh.status === 'timeout' ? 'pending' : 'failed'
+    steps.push({
+      index:       steps.length,
+      label:       'KEEPERHUB_EXECUTION',
+      hash:        kh.jobId,
+      status:      khStatus,
+      verifierUrl: kh.auditTrailUrl,
+      detail:
+        `${kh.attempts} attempt${kh.attempts === 1 ? '' : 's'} · ${kh.network} · ` +
+        `gas ${kh.finalGasUsed}${kh.error ? ` · ${kh.error}` : ''}`,
+    })
+  }
+
+  steps.push({
+    index:       steps.length,
+    label:       'SWAP_EXECUTION',
+    hash:        proof.exec.txHash,
+    status:      proof.exec.status === 'success' ? 'verified' : 'failed',
+    verifierUrl: explorerUrl(proof.exec.txHash, proof.exec.chainId),
+    detail:      `Block ${proof.exec.blockNumber} · Received ${proof.exec.amountOut} · Gas ${proof.exec.gasUsed}`,
+  })
+
+  steps.push({
+    index:       steps.length,
+    label:       'ON_CHAIN_ANCHOR',
+    hash:        proof.anchorTx,
+    status:      'verified',
+    verifierUrl: `https://chainscan-galileo.0g.ai/tx/${proof.anchorTx}`,
+    detail:      `Merkle root anchored on 0G Chain (chainId ${proof.anchorChainId}).`,
+  })
+
+  steps.push({
+    index:       steps.length,
+    label:       'STORAGE_LOG',
+    hash:        proof.logCid,
+    status:      'verified',
+    verifierUrl: `https://storagescan.0g.ai/object/${proof.logCid}`,
+    detail:      'Immutable decision record in 0G Storage Log.',
+  })
+
+  return steps
 }
 
 // ── Section skeleton ───────────────────────────────────────────────────────────
@@ -97,6 +119,7 @@ function SectionSkeleton({ lines = 3 }: { lines?: number }) {
 function TradeSummary({ proof }: { proof: Proof }) {
   const { proposal, exec } = proof
   const slippage = (proposal.maxSlippageBps / 100).toFixed(2)
+  const kh = exec.keeperhub
 
   return (
     <div
@@ -117,11 +140,28 @@ function TradeSummary({ proof }: { proof: Proof }) {
         }}
       >
         <Label color="primary" style={{ fontSize: 'var(--text-xs)' }}>PROPOSED ACTION</Label>
-        <Badge
-          variant={exec.status === 'success' ? 'verified' : 'fail'}
-          size="sm"
-          label={exec.status.toUpperCase()}
-        />
+        <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+          {kh ? (
+            <a
+              href={kh.auditTrailUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ textDecoration: 'none' }}
+              title="Open KeeperHub audit trail"
+            >
+              <Badge
+                variant="signed"
+                size="sm"
+                label={`KEEPERHUB · ${kh.attempts} ATTEMPT${kh.attempts === 1 ? '' : 'S'}`}
+              />
+            </a>
+          ) : null}
+          <Badge
+            variant={exec.status === 'success' ? 'verified' : 'fail'}
+            size="sm"
+            label={exec.status.toUpperCase()}
+          />
+        </div>
       </div>
 
       <div style={{ padding: 'var(--space-5) var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
