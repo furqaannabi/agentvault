@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect } from 'react'
+import { useAccount } from 'wagmi'
 import { useSessionStore } from '@/lib/store/sessionStore'
 
 interface AuthGateProps {
@@ -10,6 +11,17 @@ interface AuthGateProps {
 export function AuthGate({ children }: AuthGateProps) {
   const hasHydrated   = useSessionStore((s) => s._hasHydrated)
   const signedSession = useSessionStore((s) => s.signedSession)
+  const clearSession  = useSessionStore((s) => s.clearSession)
+  const { isConnected } = useAccount()
+
+  // MetaMask disconnected externally — clear session and redirect
+  useEffect(() => {
+    if (!hasHydrated || !signedSession) return
+    if (!isConnected) {
+      clearSession()
+      window.location.replace('/connect')
+    }
+  }, [isConnected, hasHydrated, signedSession, clearSession])
 
   useEffect(() => {
     if (!hasHydrated) return
