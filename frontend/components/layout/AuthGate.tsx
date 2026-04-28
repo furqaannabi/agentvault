@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { useSessionStore } from '@/lib/store/sessionStore'
 
 interface AuthGateProps {
@@ -9,14 +8,24 @@ interface AuthGateProps {
 }
 
 export function AuthGate({ children }: AuthGateProps) {
-  const router        = useRouter()
   const hasHydrated   = useSessionStore((s) => s._hasHydrated)
   const signedSession = useSessionStore((s) => s.signedSession)
 
   useEffect(() => {
     if (!hasHydrated) return
-    if (!signedSession) router.replace('/connect')
-  }, [hasHydrated, signedSession, router])
+    if (!signedSession) {
+      window.location.replace('/connect')
+      return
+    }
+    // Catch bfcache back-navigation after disconnect
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted && !useSessionStore.getState().signedSession) {
+        window.location.replace('/connect')
+      }
+    }
+    window.addEventListener('pageshow', onShow)
+    return () => window.removeEventListener('pageshow', onShow)
+  }, [hasHydrated, signedSession])
 
   // ── Loading splash ─────────────────────────────────────────────
   if (!hasHydrated) {
@@ -30,7 +39,6 @@ export function AuthGate({ children }: AuthGateProps) {
         gap:             'var(--space-4)',
         backgroundColor: 'var(--color-bg-base)',
       }}>
-        {/* Logo */}
         <div style={{
           fontFamily:    'var(--font-display)',
           fontWeight:    'var(--weight-bold)',
@@ -40,8 +48,6 @@ export function AuthGate({ children }: AuthGateProps) {
         }}>
           AgentVault
         </div>
-
-        {/* Pulsing cursor — CSS animation fires before Framer Motion hydrates */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
           <span style={{
             fontFamily:    'var(--font-mono)',
@@ -52,16 +58,13 @@ export function AuthGate({ children }: AuthGateProps) {
           }}>
             INITIALIZING
           </span>
-          <span
-            aria-hidden
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize:   'var(--text-base)',
-              color:      'var(--color-text-primary)',
-              lineHeight: 1,
-              animation:  'cursor-blink 0.8s linear infinite',
-            }}
-          >
+          <span aria-hidden style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize:   'var(--text-base)',
+            color:      'var(--color-text-primary)',
+            lineHeight: 1,
+            animation:  'cursor-blink 0.8s linear infinite',
+          }}>
             ▊
           </span>
         </div>
@@ -69,7 +72,6 @@ export function AuthGate({ children }: AuthGateProps) {
     )
   }
 
-  // Not authenticated — render nothing while redirect fires
   if (!signedSession) return null
 
   return <>{children}</>

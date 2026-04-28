@@ -125,7 +125,7 @@ function SidebarInner() {
   const setActiveSession = useChatStore((s) => s.setActiveSession)
   async function handleDisconnect() {
     await deleteSession()
-    router.push('/connect')
+    window.location.replace('/connect')
   }
 
   function goToChat(sessionId?: string) {
