@@ -7,13 +7,14 @@ import type { Hex } from '@agentvault/types';
 export interface PolicyContext {
   /** Whitelisted token addresses (lower-cased internally). */
   whitelist: Hex[];
-  /** Max amountIn (token base units). Single cap; per-token table is P2. */
+  /** Per-trade cap in USD base units (6 decimals). Compared against the
+   *  USD-valued `proposal.amountIn` so unit-agnostic across token decimals. */
   maxAmountIn: bigint;
   /** Max allowed slippage in bps. */
   maxSlippageBps: number;
-  /** Sum of amountIn already traded today (token base units). */
+  /** Sum already traded today, USD base units (6 decimals). */
   todayVolume: bigint;
-  /** Daily volume cap (token base units). */
+  /** Daily volume cap, USD base units (6 decimals). */
   dailyCap: bigint;
   /** Last successful trade timestamp (ms epoch) or null. */
   lastTradeAt: number | null;
