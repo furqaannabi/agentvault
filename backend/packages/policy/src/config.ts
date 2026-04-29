@@ -20,6 +20,8 @@ export const DEFAULT_POLICY: PolicyDefaults = {
   whitelist: [
     '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', // USDC Sepolia
     '0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14', // WETH Sepolia
+    '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', // UNI Sepolia (deepest WETH liquidity)
+    '0x779877A7B0D9E8603169DdbD7836e478b4624789', // LINK Sepolia
   ],
   maxAmountIn: 1_000_000_000n, // 1000 USDC base units
   maxSlippageBps: 100, // 1.00%
