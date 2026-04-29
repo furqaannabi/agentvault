@@ -39,3 +39,21 @@ export const UNIVERSAL_ROUTER_EXECUTE_ABI = [
     outputs: [],
   },
 ] as const;
+
+/**
+ * Minimal ERC-20 `approve(address,uint256)` ABI used to re-encode Trade API
+ * approval transactions through KeeperHub's contract-call endpoint. The Trade
+ * API's /check_approval response always targets ERC20.approve(permit2, amount).
+ */
+export const ERC20_APPROVE_ABI = [
+  {
+    type: 'function',
+    name: 'approve',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'spender', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+] as const;

@@ -3,8 +3,12 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Heading, Body, Label, Mono } from '@/components/design-system/Typography'
-import { Badge } from '@/components/design-system/Badge'
-import { approveProposal } from '@/lib/api'
+import {
+  type ExecStage,
+  type ExecStageEvent,
+  approveProposal,
+  approveProposalStream,
+} from '@/lib/api'
 import { useSessionStore } from '@/lib/store/sessionStore'
 import type { TradeProposal, Proof } from '@/lib/types'
 
@@ -20,26 +24,134 @@ function formatSlippage(bps: number): string {
 
 type Status = 'pending' | 'approving' | 'rejecting' | 'done'
 
+// 4-step progress strip. Stages from the backend SSE collapse onto these:
+//   POLICY_CHECK         → 'policy'
+//   SUBMITTING (any)     → 'submit'
+//   BROADCAST  (any)     → 'broadcast'
+//   CONFIRMING           → 'confirm'
+//   SETTLED / FAILED     → terminal (strip hides; proof view replaces it)
+type StripStep = 'policy' | 'submit' | 'broadcast' | 'confirm'
+const STRIP_ORDER: StripStep[] = ['policy', 'submit', 'broadcast', 'confirm']
+const STRIP_LABEL: Record<StripStep, string> = {
+  policy:    'POLICY',
+  submit:    'SUBMIT',
+  broadcast: 'BROADCAST',
+  confirm:   'CONFIRM',
+}
+
+function stageToStep(stage: ExecStage): StripStep | null {
+  switch (stage) {
+    case 'POLICY_CHECK': return 'policy'
+    case 'SUBMITTING':   return 'submit'
+    case 'BROADCAST':    return 'broadcast'
+    case 'CONFIRMING':   return 'confirm'
+    default:             return null
+  }
+}
+
+function ProgressStrip({
+  reachedIndex,
+  jobIds,
+  attempts,
+}: {
+  reachedIndex: number
+  jobIds:       Partial<Record<'approval' | 'swap', string>>
+  attempts?:    number
+}) {
+  return (
+    <div
+      style={{
+        display:        'flex',
+        alignItems:     'stretch',
+        gap:            'var(--space-2)',
+        padding:        'var(--space-3)',
+        border:         '1px solid var(--color-accent-blue)',
+        backgroundColor: 'var(--color-accent-blue-dim)',
+        marginBottom:   'var(--space-4)',
+      }}
+    >
+      {STRIP_ORDER.map((step, i) => {
+        const reached = i <= reachedIndex
+        const active  = i === reachedIndex
+        return (
+          <div
+            key={step}
+            style={{
+              flex:        1,
+              display:     'flex',
+              flexDirection: 'column',
+              gap:         'var(--space-1)',
+              alignItems:  'flex-start',
+              padding:     'var(--space-2)',
+              borderLeft:  active
+                ? '2px solid var(--color-accent-blue)'
+                : '2px solid transparent',
+              opacity:     reached ? 1 : 0.35,
+              transition:  'opacity var(--duration-base) var(--ease-out)',
+            }}
+          >
+            <Label
+              color={reached ? 'primary' : 'muted'}
+              style={{ fontSize: 'var(--text-xs)', letterSpacing: 'var(--tracking-widest)' }}
+            >
+              {String(i + 1).padStart(2, '0')} · {STRIP_LABEL[step]}
+            </Label>
+            {active && (
+              <motion.div
+                animate={{ opacity: [0.4, 1, 0.4] }}
+                transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+                style={{
+                  width:  6,
+                  height: 6,
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--color-accent-blue)',
+                }}
+              />
+            )}
+            {step === 'broadcast' && jobIds.approval && (
+              <Mono size="xs" color="muted" as="span">
+                approval · {jobIds.approval.slice(0, 12)}…
+              </Mono>
+            )}
+            {step === 'broadcast' && jobIds.swap && (
+              <Mono size="xs" color="muted" as="span">
+                swap · {jobIds.swap.slice(0, 12)}…
+              </Mono>
+            )}
+            {step === 'confirm' && typeof attempts === 'number' && (
+              <Mono size="xs" color="muted" as="span">
+                attempts · {attempts}
+              </Mono>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function ApprovalPrompt({
   proposal,
   onApproved,
   onRejected,
 }: ApprovalPromptProps) {
-  const [status, setStatus] = useState<Status>('pending')
-  const [error, setError]   = useState<string | null>(null)
+  const [status, setStatus]             = useState<Status>('pending')
+  const [error, setError]               = useState<string | null>(null)
+  const [reachedIndex, setReachedIndex] = useState<number>(-1)
+  const [jobIds, setJobIds]             = useState<Partial<Record<'approval' | 'swap', string>>>({})
+  const [attempts, setAttempts]         = useState<number | undefined>(undefined)
 
   const config = useSessionStore((s) => s.config)
+  const useStream = config?.executionLayer === 'keeperhub'
 
   const busy = status === 'approving' || status === 'rejecting'
 
-  // Resolve token metadata
   const tIn  = config?.allowedTokens.find((t) => t.address.toLowerCase() === proposal.tokenIn.toLowerCase())
   const tOut = config?.allowedTokens.find((t) => t.address.toLowerCase() === proposal.tokenOut.toLowerCase())
 
   const inSymbol  = tIn?.symbol ?? `${proposal.tokenIn.slice(0, 6)}…`
   const outSymbol = tOut?.symbol ?? `${proposal.tokenOut.slice(0, 6)}…`
 
-  // Format amount based on decimals
   let formattedAmount = proposal.amountIn
   if (tIn) {
     try {
@@ -54,12 +166,46 @@ export function ApprovalPrompt({
     }
   }
 
+  function handleStage(event: ExecStageEvent) {
+    const step = stageToStep(event.stage)
+    if (step) {
+      const idx = STRIP_ORDER.indexOf(step)
+      setReachedIndex((prev) => Math.max(prev, idx))
+    }
+    if (event.stage === 'BROADCAST' && event.step) {
+      const jobId = (event.payload as { jobId?: string } | undefined)?.jobId
+      if (jobId) {
+        setJobIds((prev) => ({ ...prev, [event.step!]: jobId }))
+      }
+    }
+    if (event.stage === 'BROADCAST' || event.stage === 'SETTLED') {
+      const a = (event.payload as { attempts?: number } | undefined)?.attempts
+      if (typeof a === 'number') setAttempts(a)
+    }
+  }
+
   async function handleApprove() {
     if (busy) return
     setStatus('approving')
     setError(null)
+    setReachedIndex(-1)
+    setJobIds({})
+    setAttempts(undefined)
+
     try {
-      const proof = await approveProposal(proposal.id)
+      // Demo flag is opt-in via URL: ?demo=force-retry. Documented in README.
+      const demoParam =
+        typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search).get('demo')
+          : null
+      const demo = demoParam === 'force-retry' ? 'force-retry' : undefined
+
+      const proof = useStream
+        ? await approveProposalStream(proposal.id, {
+            onStage: handleStage,
+            demo,
+          })
+        : await approveProposal(proposal.id)
       setStatus('done')
       onApproved(proof)
     } catch (err) {
@@ -93,7 +239,7 @@ export function ApprovalPrompt({
         }}
       >
         <div style={{ padding: 'var(--space-5) var(--space-4)', position: 'relative' }}>
-          {/* Minimalist Status Indicator */}
+          {/* Status indicator */}
           <div style={{ position: 'absolute', top: 'var(--space-5)', right: 'var(--space-4)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
             <Label color="muted" style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase' }}>
               {status === 'pending' ? 'APPROVAL REQUIRED' : status === 'approving' ? 'EXECUTING' : status === 'rejecting' ? 'ABORTING' : 'SETTLED'}
@@ -123,7 +269,6 @@ export function ApprovalPrompt({
             SWAP {formattedAmount} {inSymbol} → {outSymbol}
           </Heading>
 
-          {/* Trade metadata */}
           <div
             style={{
               display:    'flex',
@@ -160,6 +305,15 @@ export function ApprovalPrompt({
             </Body>
           </div>
 
+          {/* SSE progress strip — visible only while streaming */}
+          {status === 'approving' && useStream && (
+            <ProgressStrip
+              reachedIndex={reachedIndex}
+              jobIds={jobIds}
+              attempts={attempts}
+            />
+          )}
+
           {/* Error */}
           {error ? (
             <div
@@ -194,7 +348,6 @@ export function ApprovalPrompt({
 
           {/* Actions */}
           <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
-            {/* Approve */}
             <button
               onClick={handleApprove}
               disabled={busy}
@@ -224,7 +377,6 @@ export function ApprovalPrompt({
               )}
             </button>
 
-            {/* Reject */}
             <button
               onClick={handleReject}
               disabled={busy}

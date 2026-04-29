@@ -50,12 +50,17 @@ export type ExecStatus = 'success' | 'reverted' | 'failed';
  * KeeperHub-managed execution lifecycle, surfaced into the Proof so verifiers
  * can audit the independent execution layer (retries, gas, audit trail).
  *
- * Lives at ExecResult.keeperhub when EXEC_MODE=keeperhub. Folded into rootHash
- * via canonical hashExec — proof binding without schema bifurcation.
+ * One entry per KeeperHub job; AgentVault routes both the Permit2 approval
+ * and the Universal Router swap through KH, so a single trade typically
+ * produces two receipts (kind: 'approval' and kind: 'swap'). Lifted to
+ * Proof.keeperhubReceipts (top-level) so it forms its own leaf in rootHash:
+ * `keccak(hp || hv || he || hk)`. See proof/hash.ts.
  *
  * Only public, demo-safe fields. Never include the API key or any secret here.
  */
 export interface KeeperhubExecution {
+  /** Discriminator: which onchain step this receipt covers. */
+  kind: 'approval' | 'swap';
   jobId: string;
   auditTrailUrl: string;
   attempts: number;
@@ -75,8 +80,18 @@ export interface ExecResult {
   status: ExecStatus;
   error?: string;
   chainId: number;
-  /** Present when EXEC_MODE=keeperhub. Optional for backward compat. */
+  /**
+   * Back-compat alias for the swap-leg KeeperHub receipt. Mirrors the
+   * `kind: 'swap'` entry in Proof.keeperhubReceipts. Existing FE code reads
+   * this field directly; new code should prefer Proof.keeperhubReceipts.
+   */
   keeperhub?: KeeperhubExecution;
+  /**
+   * Transient carrier — populated by the keeperhub adapter, consumed by the
+   * /approve route which forwards the array into assembleProof and clears
+   * this field before persistence (the canonical home is Proof, not exec).
+   */
+  keeperhubReceipts?: KeeperhubExecution[];
 }
 
 export interface Proof {
@@ -88,6 +103,12 @@ export interface Proof {
   proposal: TradeProposal;
   verdict: PolicyVerdict;
   exec: ExecResult;
+  /**
+   * Ordered list of KeeperHub receipts (typically [approval, swap]). Forms
+   * the 4th leaf of rootHash so KeeperHub becomes cryptographically part of
+   * the proof, not just a URL. Empty/absent for non-keeperhub executions.
+   */
+  keeperhubReceipts?: KeeperhubExecution[];
   rootHash: Hex;
   anchorTx: Hex;
   anchorChainId: number;
@@ -145,11 +166,48 @@ export interface SignedSession {
  */
 export type ExecMode = 'mock' | 'real' | 'keeperhub';
 
+/**
+ * Lifecycle stages emitted via the optional `onStage` callback below. Drives
+ * the SSE sub-progress strip on the FE during /approve. Stages are deterministic
+ * for the keeperhub adapter; mock/real adapters synthesise a subset so the
+ * FE behaviour is uniform regardless of EXEC_MODE.
+ */
+export type ExecStage =
+  | 'POLICY_CHECK'
+  | 'SUBMITTING'
+  | 'BROADCAST'
+  | 'CONFIRMING'
+  | 'SETTLED'
+  | 'FAILED';
+
+export interface ExecStageEvent {
+  stage: ExecStage;
+  /** Optional sub-stage label (e.g. 'approval' vs 'swap'). */
+  step?: 'approval' | 'swap';
+  /** Free-form payload — txHash, jobId, attempts, error message, etc. */
+  payload?: Record<string, unknown>;
+}
+
 export interface ExecSwapInput {
   proposal: TradeProposal;
   verdict: PolicyVerdict;
   /** End-user wallet (delegating principal). Real adapter pulls via allowance + returns output here. */
   user: Hex;
+  /**
+   * Demo-only overrides surfaced through query params (e.g. ?demo=force-retry).
+   * Never set in production paths; the route layer parses the query and
+   * forwards. See routes/approve.ts.
+   */
+  demoOverrides?: {
+    /** Override KH gasLimitMultiplier (e.g. '0.85' to force a real KH retry). */
+    gasLimitMultiplier?: string;
+  };
+  /**
+   * Optional progress callback. Called synchronously from the adapter at each
+   * lifecycle transition. Errors thrown inside the callback must not crash
+   * the adapter — implementers wrap with try/catch.
+   */
+  onStage?: (event: ExecStageEvent) => void;
 }
 
 export interface ExecAdapter {

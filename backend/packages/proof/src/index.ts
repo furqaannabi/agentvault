@@ -1,5 +1,12 @@
 import type { Memory } from '@agentvault/memory';
-import type { ExecResult, Hex, PolicyVerdict, Proof, TradeProposal } from '@agentvault/types';
+import type {
+  ExecResult,
+  Hex,
+  KeeperhubExecution,
+  PolicyVerdict,
+  Proof,
+  TradeProposal,
+} from '@agentvault/types';
 import { type AnchorClient, makeAnchorClient } from './anchor.js';
 import { type SessionBinding, assembleProof } from './assemble.js';
 import { type ProofConfig, proofConfigFromEnv } from './config.js';
@@ -7,7 +14,15 @@ import { type ProofConfig, proofConfigFromEnv } from './config.js';
 export type { SessionBinding } from './assemble.js';
 
 export type { ProofConfig } from './config.js';
-export { canonicalize, computeRoot, hashCanonical, hashExec, hashProposal, hashVerdict } from './hash.js';
+export {
+  canonicalize,
+  computeRoot,
+  hashCanonical,
+  hashExec,
+  hashKeeperhub,
+  hashProposal,
+  hashVerdict,
+} from './hash.js';
 
 export interface ProofPipeline {
   assemble(input: {
@@ -15,6 +30,7 @@ export interface ProofPipeline {
     verdict: PolicyVerdict;
     exec: ExecResult;
     session: SessionBinding;
+    keeperhubReceipts?: readonly KeeperhubExecution[];
   }): Promise<Proof>;
   isAnchored(rootHash: Hex): Promise<boolean>;
 }

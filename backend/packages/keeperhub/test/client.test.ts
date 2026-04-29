@@ -1,7 +1,12 @@
 import type { Hex } from '@agentvault/types';
 import { ethers } from 'ethers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { UNIVERSAL_ROUTER_EXECUTE_ABI, UNIVERSAL_ROUTER_SEPOLIA, createKeeperhubClient } from '../src/index.js';
+import {
+  ERC20_APPROVE_ABI,
+  UNIVERSAL_ROUTER_EXECUTE_ABI,
+  UNIVERSAL_ROUTER_SEPOLIA,
+  createKeeperhubClient,
+} from '../src/index.js';
 
 const SEPOLIA = 11155111;
 
@@ -57,7 +62,7 @@ describe('keeperhub client — chain guard', () => {
 });
 
 describe('keeperhub client — submitJob', () => {
-  it('POSTs contract-call with serialized args + abi and Bearer auth', async () => {
+  it('POSTs contract-call with serialized args + abi and X-API-Key auth', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const fetchSpy = makeFetch([
       (url, init) => {
@@ -79,7 +84,8 @@ describe('keeperhub client — submitJob', () => {
     const c = calls[0]!;
     expect(c.url).toMatch(/\/api\/execute\/contract-call$/);
     const headers = c.init?.headers as Record<string, string>;
-    expect(headers.authorization).toBe('Bearer kh_test_key');
+    expect(headers['x-api-key']).toBe('kh_test_key');
+    expect(headers.authorization).toBeUndefined();
     const body = JSON.parse(String(c.init?.body)) as {
       network: string;
       contractAddress: string;
@@ -216,6 +222,76 @@ describe('keeperhub client — executeSwap', () => {
     expect(args[0]).toBe(commands);
     expect(args[1]).toEqual(inputs);
     expect(args[2]).toBe(deadline.toString());
+  });
+
+  it('executeApproval submits ERC20.approve via /api/execute/contract-call', async () => {
+    const submittedBodies: unknown[] = [];
+    const fetchSpy = makeFetch([
+      (_url, init) => {
+        submittedBodies.push(JSON.parse(String(init?.body)));
+        return jsonResponse({ executionId: 'direct_approval_1', status: 'pending' });
+      },
+      () =>
+        jsonResponse({
+          executionId: 'direct_approval_1',
+          status: 'completed',
+          transactionHash: '0x' + 'd'.repeat(64),
+          gasUsedWei: '46000',
+        }),
+    ]);
+    const client = minimalCfg({ fetch: fetchSpy });
+    const usdc = ('0x' + '1'.repeat(40)) as Hex;
+    const permit2 = ('0x' + '2'.repeat(40)) as Hex;
+    const r = await client.executeApproval(
+      { tokenAddress: usdc, spender: permit2, amount: '500000000' },
+      { initialIntervalMs: 1, maxIntervalMs: 1, timeoutMs: 5_000 },
+    );
+    expect(r.status).toBe('success');
+    expect(r.finalTxHash).toBe('0x' + 'd'.repeat(64));
+    expect(submittedBodies).toHaveLength(1);
+    const body = submittedBodies[0] as {
+      contractAddress: string;
+      functionName: string;
+      functionArgs: string;
+      abi: string;
+      gasLimitMultiplier?: string;
+    };
+    expect(body.contractAddress.toLowerCase()).toBe(usdc.toLowerCase());
+    expect(body.functionName).toBe('approve');
+    expect(JSON.parse(body.functionArgs)).toEqual([permit2, '500000000']);
+    expect(JSON.parse(body.abi)).toEqual(ERC20_APPROVE_ABI);
+    expect(body.gasLimitMultiplier).toBe('1.2');
+  });
+
+  it('executeSwap honours gasLimitMultiplier override (Item 4 force-retry)', async () => {
+    const iface = new ethers.Interface(UNIVERSAL_ROUTER_EXECUTE_ABI);
+    const data = iface.encodeFunctionData('execute', ['0x00', ['0xdead'], 1n]) as Hex;
+    const submittedBodies: unknown[] = [];
+    const fetchSpy = makeFetch([
+      (_u, init) => {
+        submittedBodies.push(JSON.parse(String(init?.body)));
+        return jsonResponse({ executionId: 'direct_swap_force', status: 'pending' });
+      },
+      () =>
+        jsonResponse({
+          executionId: 'direct_swap_force',
+          status: 'completed',
+          transactionHash: '0x' + 'e'.repeat(64),
+          gasUsedWei: '180000',
+        }),
+    ]);
+    const client = minimalCfg({ fetch: fetchSpy });
+    await client.executeSwap(
+      {
+        routerAddress: UNIVERSAL_ROUTER_SEPOLIA,
+        calldata: data,
+        value: 0n,
+        gasLimitMultiplier: '0.85',
+      },
+      { initialIntervalMs: 1, maxIntervalMs: 1, timeoutMs: 5_000 },
+    );
+    const body = submittedBodies[0] as { gasLimitMultiplier: string };
+    expect(body.gasLimitMultiplier).toBe('0.85');
   });
 
   it('rejects calldata that is not Universal Router execute()', async () => {

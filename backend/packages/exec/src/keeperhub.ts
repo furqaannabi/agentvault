@@ -1,9 +1,17 @@
 import {
+  ERC20_APPROVE_ABI,
   type KeeperhubClientConfig,
   UNIVERSAL_ROUTER_SEPOLIA,
   createKeeperhubClient,
 } from '@agentvault/keeperhub';
-import type { ExecAdapter, ExecResult, ExecSwapInput, Hex } from '@agentvault/types';
+import type {
+  ExecAdapter,
+  ExecResult,
+  ExecStageEvent,
+  ExecSwapInput,
+  Hex,
+  KeeperhubExecution,
+} from '@agentvault/types';
 import { createUniswapApiClient } from '@agentvault/uniswap-api';
 import { ethers } from 'ethers';
 import type { ExecConfig } from './index.js';
@@ -11,18 +19,19 @@ import type { ExecConfig } from './index.js';
 /**
  * KeeperHub-routed exec adapter.
  *
- * Flow per swap:
- *   1. Pull funds from user (ERC20.transferFrom) — direct, our wallet must hold input tokens.
+ * Flow per swap (every gas-bearing onchain write goes through KeeperHub):
+ *   1. Pull funds from user (ERC20.transferFrom) — direct ethers, since the
+ *      user's allowance was granted to *our* delegate, not KH's Turnkey.
  *   2. Run Uniswap Trade API: /check_approval, /quote, sign Permit2 with our wallet.
- *   3. Get swap calldata for Universal Router from /swap.
- *   4. Hand calldata + router address to KeeperHub's contract-call API.
- *      KeeperHub signs + broadcasts via its Turnkey wallet, retrying on revert/gas.
- *   5. Once KeeperHub reports terminal status, fetch the receipt with our RPC to
- *      parse amountOut from ERC20 Transfer logs (KH does not return decoded logs).
- *   6. Forward output to end user.
+ *   3. If Trade API returns a Permit2 approval tx, decode and route through
+ *      KH executeApproval (KH wallet signs/broadcasts).
+ *   4. Hand swap calldata to KH executeSwap. KH retries on transient failures.
+ *   5. Once KH reports terminal status, fetch the receipt with our RPC to
+ *      parse amountOut from ERC20 Transfer logs.
+ *   6. Forward output to end user via direct ethers transfer.
  *
- * If steps 1-3 succeed but step 4 fails to even submit, optionally fall back
- * to direct send when KEEPERHUB_FALLBACK=true (config.keeperhub.fallbackToDirect).
+ * Receipts from steps 3 + 4 are accumulated into ExecResult.keeperhubReceipts
+ * (transient) so the route can lift them to Proof.keeperhubReceipts.
  *
  * Sepolia only — chain guard inside keeperhub client + here at boot.
  */
@@ -30,7 +39,7 @@ import type { ExecConfig } from './index.js';
 const ZERO_HASH: Hex = '0x0000000000000000000000000000000000000000000000000000000000000000';
 const SEPOLIA_CHAIN_ID = 11155111;
 const ERC20_TRANSFER_TOPIC = ethers.id('Transfer(address,address,uint256)');
-const ERC20_ABI = [
+const ERC20_RUNTIME_ABI = [
   'function allowance(address owner, address spender) view returns (uint256)',
   'function transferFrom(address from, address to, uint256 amount) returns (bool)',
   'function transfer(address to, uint256 amount) returns (bool)',
@@ -76,6 +85,29 @@ export interface KeeperhubAdapterConfig {
   dashboardUrl?: string;
 }
 
+/** Decode an ERC20 approve(spender, amount) calldata into its args. */
+function decodeApprovalCalldata(data: Hex): { spender: Hex; amount: string } {
+  const iface = new ethers.Interface(ERC20_APPROVE_ABI);
+  const parsed = iface.parseTransaction({ data });
+  if (!parsed || parsed.name !== 'approve') {
+    throw new Error(
+      `[exec.keeperhub] expected ERC20.approve calldata, got ${parsed?.name ?? 'unknown'}`,
+    );
+  }
+  const [spender, amount] = parsed.args as unknown as [string, bigint];
+  return { spender: spender as Hex, amount: amount.toString() };
+}
+
+/** Safely emit a stage event — never lets a faulty consumer crash the adapter. */
+function emitStage(cb: ExecSwapInput['onStage'], event: ExecStageEvent): void {
+  if (!cb) return;
+  try {
+    cb(event);
+  } catch (e) {
+    console.warn('[exec.keeperhub] onStage callback threw:', (e as Error).message);
+  }
+}
+
 export function keeperhubAdapter(
   config: ExecConfig,
   kh: KeeperhubAdapterConfig,
@@ -108,9 +140,17 @@ export function keeperhubAdapter(
   const cache = new Map<string, ExecResult>();
 
   return {
-    async swap({ proposal, verdict, user }: ExecSwapInput): Promise<ExecResult> {
+    async swap({
+      proposal,
+      verdict,
+      user,
+      demoOverrides,
+      onStage,
+    }: ExecSwapInput): Promise<ExecResult> {
       const cached = cache.get(proposal.id);
       if (cached) return cached;
+
+      const receipts: KeeperhubExecution[] = [];
 
       const fail = (
         status: 'failed' | 'reverted',
@@ -126,8 +166,10 @@ export function keeperhubAdapter(
           status,
           error,
           chainId: SEPOLIA_CHAIN_ID,
+          keeperhubReceipts: receipts.length > 0 ? receipts : undefined,
           ...partial,
         };
+        emitStage(onStage, { stage: 'FAILED', payload: { error, status } });
         cache.set(proposal.id, r);
         return r;
       };
@@ -138,9 +180,9 @@ export function keeperhubAdapter(
         const swapper = wallet.address as Hex;
         const amountInBig = BigInt(proposal.amountIn);
         // biome-ignore lint/suspicious/noExplicitAny: ethers Contract method types are dynamic
-        const tokenIn: any = new ethers.Contract(proposal.tokenIn, ERC20_ABI, wallet);
+        const tokenIn: any = new ethers.Contract(proposal.tokenIn, ERC20_RUNTIME_ABI, wallet);
         // biome-ignore lint/suspicious/noExplicitAny: ethers Contract method types are dynamic
-        const tokenOut: any = new ethers.Contract(proposal.tokenOut, ERC20_ABI, wallet);
+        const tokenOut: any = new ethers.Contract(proposal.tokenOut, ERC20_RUNTIME_ABI, wallet);
 
         const allowance: bigint = await tokenIn.allowance(user, swapper);
         if (allowance < amountInBig) {
@@ -160,14 +202,74 @@ export function keeperhubAdapter(
           amount: proposal.amountIn,
           chainId: SEPOLIA_CHAIN_ID,
         });
+
+        // Step 3: route Permit2 approval through KeeperHub (Item 1).
         if (approvalRes.approval) {
-          const approvalTx = await wallet.sendTransaction({
-            to: approvalRes.approval.to,
-            data: approvalRes.approval.data,
-            value: approvalRes.approval.value ? BigInt(approvalRes.approval.value) : 0n,
+          let spender: Hex;
+          let amount: string;
+          try {
+            ({ spender, amount } = decodeApprovalCalldata(approvalRes.approval.data));
+          } catch (e) {
+            return fail('failed', `failed to decode approval calldata: ${(e as Error).message}`);
+          }
+
+          emitStage(onStage, {
+            stage: 'SUBMITTING',
+            step: 'approval',
+            payload: { tokenAddress: approvalRes.approval.to, spender, amount },
           });
-          const ar = await approvalTx.wait();
-          if (!ar || ar.status !== 1) return fail('failed', 'approval tx failed');
+
+          let approvalKh: Awaited<ReturnType<typeof keeperhub.executeApproval>>;
+          try {
+            approvalKh = await keeperhub.executeApproval({
+              tokenAddress: approvalRes.approval.to,
+              spender,
+              amount,
+            });
+          } catch (e) {
+            if (fallbackToDirect) {
+              console.warn(
+                '[exec.keeperhub] approval submit failed; falling back to direct send:',
+                (e as Error).message,
+              );
+              const tx = await wallet.sendTransaction({
+                to: approvalRes.approval.to,
+                data: approvalRes.approval.data,
+                value: approvalRes.approval.value ? BigInt(approvalRes.approval.value) : 0n,
+              });
+              const r = await tx.wait();
+              if (!r || r.status !== 1) return fail('failed', 'approval (fallback) tx failed');
+            } else {
+              return fail('failed', `keeperhub approval submit failed: ${(e as Error).message}`);
+            }
+          }
+          // biome-ignore lint/suspicious/noExplicitAny: declared via try/catch above
+          const ak = approvalKh!;
+          if (ak) {
+            const approvalReceipt: KeeperhubExecution = {
+              kind: 'approval',
+              jobId: ak.jobId,
+              auditTrailUrl: ak.auditTrailUrl,
+              attempts: ak.attempts,
+              finalTxHash: ak.finalTxHash,
+              finalGasUsed: ak.finalGasUsed,
+              status: ak.status,
+              network: 'sepolia',
+              ...(ak.error ? { error: ak.error } : {}),
+            };
+            receipts.push(approvalReceipt);
+            emitStage(onStage, {
+              stage: 'BROADCAST',
+              step: 'approval',
+              payload: { jobId: ak.jobId, txHash: ak.finalTxHash, attempts: ak.attempts },
+            });
+            if (ak.status !== 'success') {
+              return fail(
+                ak.status === 'failed' ? 'reverted' : 'failed',
+                `keeperhub approval ${ak.status}: ${ak.error ?? 'see audit trail'}`,
+              );
+            }
+          }
         }
 
         const quoteRes = await uniswap.quoteProposal<QuoteResponse>(
@@ -201,65 +303,81 @@ export function keeperhubAdapter(
         const routerAddress = (tx0.to ?? router) as Hex;
         const value = tx0.value ? BigInt(tx0.value) : 0n;
 
-        // Hand swap calldata to KeeperHub for guaranteed execution + retries.
-        // If submission itself fails (network/auth) and fallbackToDirect=true,
-        // fall through to a plain ethers send so the demo doesn't crash.
-        let kh: Awaited<ReturnType<typeof keeperhub.executeSwap>>;
+        // Step 4: route Universal Router execute() through KeeperHub.
+        // demoOverrides.gasLimitMultiplier (Item 4) lets us force a real KH retry.
+        emitStage(onStage, {
+          stage: 'SUBMITTING',
+          step: 'swap',
+          payload: { routerAddress, gasLimitMultiplier: demoOverrides?.gasLimitMultiplier },
+        });
+
+        let swapKh: Awaited<ReturnType<typeof keeperhub.executeSwap>>;
         try {
-          kh = await keeperhub.executeSwap({
+          swapKh = await keeperhub.executeSwap({
             routerAddress,
             calldata: tx0.data,
             value,
+            gasLimitMultiplier: demoOverrides?.gasLimitMultiplier,
           });
         } catch (e) {
           if (fallbackToDirect) {
             console.warn(
-              '[exec.keeperhub] submit failed; falling back to direct send:',
+              '[exec.keeperhub] swap submit failed; falling back to direct send:',
               (e as Error).message,
             );
             return await directFallback(routerAddress, tx0.data, value);
           }
-          return fail('failed', `keeperhub submit failed: ${(e as Error).message}`);
+          return fail('failed', `keeperhub swap submit failed: ${(e as Error).message}`);
         }
 
-        // Build the keeperhub block we'll embed in ExecResult regardless of outcome.
-        const khBlock = {
-          jobId: kh.jobId,
-          auditTrailUrl: kh.auditTrailUrl,
-          attempts: kh.attempts,
-          finalTxHash: kh.finalTxHash,
-          finalGasUsed: kh.finalGasUsed,
-          status: kh.status,
-          network: 'sepolia' as const,
-          ...(kh.error ? { error: kh.error } : {}),
+        const swapReceipt: KeeperhubExecution = {
+          kind: 'swap',
+          jobId: swapKh.jobId,
+          auditTrailUrl: swapKh.auditTrailUrl,
+          attempts: swapKh.attempts,
+          finalTxHash: swapKh.finalTxHash,
+          finalGasUsed: swapKh.finalGasUsed,
+          status: swapKh.status,
+          network: 'sepolia',
+          ...(swapKh.error ? { error: swapKh.error } : {}),
         };
+        receipts.push(swapReceipt);
 
-        if (kh.status !== 'success') {
+        emitStage(onStage, {
+          stage: 'BROADCAST',
+          step: 'swap',
+          payload: { jobId: swapKh.jobId, txHash: swapKh.finalTxHash, attempts: swapKh.attempts },
+        });
+
+        if (swapKh.status !== 'success') {
           return fail(
-            kh.status === 'failed' ? 'reverted' : 'failed',
-            `keeperhub ${kh.status}: ${kh.error ?? 'see audit trail'}`,
-            { keeperhub: khBlock },
+            swapKh.status === 'failed' ? 'reverted' : 'failed',
+            `keeperhub swap ${swapKh.status}: ${swapKh.error ?? 'see audit trail'}`,
+            { keeperhub: swapReceipt },
           );
         }
 
-        // KeeperHub broadcast succeeded. Fetch receipt locally to parse logs.
-        const receipt = await provider.getTransactionReceipt(kh.finalTxHash);
+        emitStage(onStage, {
+          stage: 'CONFIRMING',
+          step: 'swap',
+          payload: { txHash: swapKh.finalTxHash },
+        });
+
+        // KH broadcast succeeded. Fetch receipt locally to parse logs.
+        const receipt = await provider.getTransactionReceipt(swapKh.finalTxHash);
         if (!receipt) {
           return fail(
             'failed',
-            `keeperhub reported success but no receipt for ${kh.finalTxHash}`,
-            { keeperhub: khBlock },
+            `keeperhub reported success but no receipt for ${swapKh.finalTxHash}`,
+            { keeperhub: swapReceipt },
           );
         }
         if (receipt.status !== 1) {
           return fail('reverted', `tx reverted at block ${receipt.blockNumber}`, {
-            keeperhub: khBlock,
+            keeperhub: swapReceipt,
           });
         }
 
-        // KeeperHub broadcasts from its own wallet — Universal Router calldata
-        // typically includes a recipient command targeting our `swapper`, so the
-        // tokenOut Transfer log lands at our wallet address.
         const tokenOutLc = proposal.tokenOut.toLowerCase();
         const swapperPadded =
           `0x${'0'.repeat(24)}${swapper.slice(2).toLowerCase()}`.toLowerCase();
@@ -281,7 +399,7 @@ export function keeperhubAdapter(
             return fail(
               'failed',
               `swap ok but transfer to user failed (amount=${amountOut})`,
-              { keeperhub: khBlock },
+              { keeperhub: swapReceipt },
             );
           }
         }
@@ -294,8 +412,18 @@ export function keeperhubAdapter(
           gasUsed: receipt.gasUsed.toString(),
           status: 'success',
           chainId: SEPOLIA_CHAIN_ID,
-          keeperhub: khBlock,
+          keeperhub: swapReceipt,
+          keeperhubReceipts: receipts,
         };
+        emitStage(onStage, {
+          stage: 'SETTLED',
+          payload: {
+            txHash: receipt.hash,
+            blockNumber: Number(receipt.blockNumber),
+            amountOut: amountOut.toString(),
+            attempts: swapKh.attempts,
+          },
+        });
         cache.set(proposal.id, result);
         return result;
       } catch (e) {
@@ -304,26 +432,25 @@ export function keeperhubAdapter(
 
       // Internal direct-fallback shim used only when KEEPERHUB_FALLBACK=true and
       // the *submission* to KeeperHub itself fails. Keeps the demo alive when
-      // KeeperHub is down. The proof's keeperhub block is intentionally omitted
-      // so verifiers can detect that this trade did not actually flow through
-      // the KeeperHub layer.
+      // KeeperHub is down. No keeperhub receipts attached, so verifiers can
+      // detect this trade did not flow through the KeeperHub layer.
       async function directFallback(
         to: Hex,
         data: Hex,
         value: bigint,
       ): Promise<ExecResult> {
         const tx = await wallet.sendTransaction({ to, data, value });
-        const receipt = await tx.wait();
-        if (!receipt) return fail('failed', 'direct fallback: no receipt');
-        if (receipt.status !== 1) {
-          return fail('reverted', `direct fallback: tx reverted at block ${receipt.blockNumber}`);
+        const r = await tx.wait();
+        if (!r) return fail('failed', 'direct fallback: no receipt');
+        if (r.status !== 1) {
+          return fail('reverted', `direct fallback: tx reverted at block ${r.blockNumber}`);
         }
         const result: ExecResult = {
           proposalId: proposal.id,
-          txHash: receipt.hash as Hex,
-          blockNumber: Number(receipt.blockNumber),
+          txHash: r.hash as Hex,
+          blockNumber: Number(r.blockNumber),
           amountOut: '0',
-          gasUsed: receipt.gasUsed.toString(),
+          gasUsed: r.gasUsed.toString(),
           status: 'success',
           chainId: SEPOLIA_CHAIN_ID,
         };

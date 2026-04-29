@@ -4,10 +4,11 @@ import type { Hex } from '@agentvault/types';
  * KeeperHub Direct Execution API types — mirrors the public surface documented
  * at https://docs.keeperhub.com/api/direct-execution.
  *
- * All endpoints rooted at {baseUrl}/api/execute/* and authenticated with
- * `Authorization: Bearer ${apiKey}` (see /api/authentication). Network names
- * are slugs (e.g. "sepolia", "base-sepolia") — we hard-lock to "sepolia" for
- * AgentVault per PRD (chainId 11155111 only).
+ * All endpoints rooted at {baseUrl}/api/execute/* and authenticated with the
+ * `X-API-Key: <apiKey>` header per
+ * https://docs.keeperhub.com/api/direct-execution#authentication. Network
+ * names are slugs (e.g. "sepolia", "base-sepolia") — we hard-lock to "sepolia"
+ * for AgentVault per PRD (chainId 11155111 only).
  */
 
 export type KhDirectExecStatus = 'pending' | 'running' | 'completed' | 'failed';
@@ -107,4 +108,24 @@ export interface ExecuteSwapInput {
   calldata: Hex;
   /** Native value to forward (wei). 0 for ERC-20→ERC-20 swaps. */
   value?: bigint | string;
+  /**
+   * Optional override for KeeperHub's gas-limit multiplier. Default is '1.3'.
+   * Set to '0.85' (Item 4 demo path) to under-estimate gas and provoke a
+   * real KeeperHub retry — exposes attempts >= 2 in the audit trail.
+   */
+  gasLimitMultiplier?: string;
+}
+
+export interface ExecuteApprovalInput {
+  /** ERC-20 token contract being approved (e.g. USDC on Sepolia). */
+  tokenAddress: Hex;
+  /** Spender to approve (typically Permit2 from the Trade API response). */
+  spender: Hex;
+  /**
+   * Approval amount as a uint256 string. Pass `2^256 - 1` for infinite
+   * approvals if the Trade API returns one.
+   */
+  amount: string;
+  /** Optional override for KeeperHub's gas-limit multiplier. Default '1.2'. */
+  gasLimitMultiplier?: string;
 }

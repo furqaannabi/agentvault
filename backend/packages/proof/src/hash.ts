@@ -1,4 +1,10 @@
-import type { ExecResult, Hex, PolicyVerdict, TradeProposal } from '@agentvault/types';
+import type {
+  ExecResult,
+  Hex,
+  KeeperhubExecution,
+  PolicyVerdict,
+  TradeProposal,
+} from '@agentvault/types';
 import { ethers } from 'ethers';
 
 const enc = new TextEncoder();
@@ -36,12 +42,35 @@ export function hashExec(e: ExecResult): Hex {
 }
 
 /**
- * Root = keccak(h(proposal) ‖ h(verdict) ‖ h(exec)).
- * Simple 3-leaf hash chain — sufficient for P1 proof; extend to merkle in P2 if needed.
+ * Hash of the keeperhub-receipts leaf. Order is significant — receipts are
+ * intentionally hashed as a positional array so swapping approval/swap
+ * positions produces a different hash. Empty/absent inputs hash to a stable
+ * value (`hashCanonical([])`) so non-keeperhub modes share a deterministic
+ * 4-leaf rootHash without special-casing branches.
  */
-export function computeRoot(p: TradeProposal, v: PolicyVerdict, e: ExecResult): Hex {
+export function hashKeeperhub(receipts?: readonly KeeperhubExecution[]): Hex {
+  return hashCanonical(receipts ?? []);
+}
+
+/**
+ * Root = keccak(h(proposal) ‖ h(verdict) ‖ h(exec) ‖ h(keeperhubReceipts)).
+ * 4-leaf hash chain — sufficient for P1 proof; extend to merkle in P2 if needed.
+ *
+ * The keeperhub leaf is always included even when `receipts` is empty so all
+ * proofs share the same shape.
+ */
+export function computeRoot(
+  p: TradeProposal,
+  v: PolicyVerdict,
+  e: ExecResult,
+  receipts?: readonly KeeperhubExecution[],
+): Hex {
   const hp = hashProposal(p);
   const hv = hashVerdict(v);
   const he = hashExec(e);
-  return ethers.solidityPackedKeccak256(['bytes32', 'bytes32', 'bytes32'], [hp, hv, he]) as Hex;
+  const hk = hashKeeperhub(receipts);
+  return ethers.solidityPackedKeccak256(
+    ['bytes32', 'bytes32', 'bytes32', 'bytes32'],
+    [hp, hv, he, hk],
+  ) as Hex;
 }

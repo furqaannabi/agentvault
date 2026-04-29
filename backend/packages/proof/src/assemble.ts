@@ -1,5 +1,12 @@
 import type { Memory } from '@agentvault/memory';
-import type { ExecResult, Hex, PolicyVerdict, Proof, TradeProposal } from '@agentvault/types';
+import type {
+  ExecResult,
+  Hex,
+  KeeperhubExecution,
+  PolicyVerdict,
+  Proof,
+  TradeProposal,
+} from '@agentvault/types';
 import type { AnchorClient } from './anchor.js';
 import { computeRoot } from './hash.js';
 
@@ -15,10 +22,14 @@ export interface AssembleDeps {
 
 /**
  * Pipeline:
- *  1. compute rootHash = keccak(h(proposal)||h(verdict)||h(exec))
+ *  1. compute rootHash = keccak(h(proposal)||h(verdict)||h(exec)||h(keeperhubReceipts))
  *  2. logAppend the full proof body → logCid (rootHash)
  *  3. anchorRoot(rootHash, logCid) on 0G Chain → anchorTx
  *  4. persist final Proof to KV (proof:<proposalId>)
+ *
+ * `keeperhubReceipts` is the canonical home for KH execution data; it forms
+ * the 4th leaf of rootHash. The route layer extracts receipts from
+ * ExecResult.keeperhubReceipts (transient) and forwards them here.
  */
 export async function assembleProof(
   deps: AssembleDeps,
@@ -27,12 +38,21 @@ export async function assembleProof(
     verdict: PolicyVerdict;
     exec: ExecResult;
     session: SessionBinding;
+    keeperhubReceipts?: readonly KeeperhubExecution[];
   },
 ): Promise<Proof> {
-  const { proposal, verdict, exec, session } = input;
-  const rootHash = computeRoot(proposal, verdict, exec);
+  const { proposal, verdict, exec, session, keeperhubReceipts } = input;
 
-  // Body persisted to immutable Log; logCid = the root hash returned by indexer
+  // Strip the transient carrier off ExecResult before persisting — the
+  // canonical home for receipts is Proof.keeperhubReceipts (top-level).
+  // We keep the back-compat ExecResult.keeperhub (singular swap entry) intact
+  // so existing FE readers don't break.
+  const persistedExec: ExecResult = { ...exec };
+  delete persistedExec.keeperhubReceipts;
+
+  const receipts = keeperhubReceipts ?? exec.keeperhubReceipts;
+  const rootHash = computeRoot(proposal, verdict, persistedExec, receipts);
+
   const logBody = {
     kind: 'agentvault.proof.v1' as const,
     proposalId: proposal.id,
@@ -40,13 +60,13 @@ export async function assembleProof(
     sessionHash: session.sessionHash,
     proposal,
     verdict,
-    exec,
+    exec: persistedExec,
+    keeperhubReceipts: receipts,
     rootHash,
     createdAt: Date.now(),
   };
   const { rootHash: logCid } = await deps.memory.appendLog(logBody);
 
-  // Anchor on 0G Chain
   const { txHash: anchorTx } = await deps.anchor.anchor(rootHash, logCid);
 
   const proof: Proof = {
@@ -55,7 +75,10 @@ export async function assembleProof(
     sessionHash: session.sessionHash,
     proposal,
     verdict,
-    exec,
+    exec: persistedExec,
+    ...(receipts && receipts.length > 0
+      ? { keeperhubReceipts: [...receipts] as KeeperhubExecution[] }
+      : {}),
     rootHash,
     anchorTx,
     anchorChainId: deps.anchor.cfg.chainId,

@@ -368,14 +368,24 @@ function chainLabel(chainId: number): string {
   return `chain ${chainId}`
 }
 
-function executionBadgeLabel(layer: ExecutionLayer | undefined, chainId: number): string {
+function executionBadgeLabel(
+  layer: ExecutionLayer | undefined,
+  chainId: number,
+  isLive: boolean,
+): string {
   const chain = chainLabel(chainId)
-  switch (layer) {
-    case 'keeperhub': return `KEEPERHUB · ${chain.toUpperCase()}`
-    case 'direct':    return `DIRECT · ${chain.toUpperCase()}`
-    case 'mock':      return `MOCK · ${chain.toUpperCase()}`
-    default:          return `EXEC · ${chain.toUpperCase()}`
-  }
+  const base = (() => {
+    switch (layer) {
+      case 'keeperhub': return `KEEPERHUB · ${chain.toUpperCase()}`
+      case 'direct':    return `DIRECT · ${chain.toUpperCase()}`
+      case 'mock':      return `MOCK · ${chain.toUpperCase()}`
+      default:          return `EXEC · ${chain.toUpperCase()}`
+    }
+  })()
+  // Once /config has resolved we know the backend is reachable + the requested
+  // execution mode is wired (e.g. KEEPERHUB_API_KEY present). Append LIVE so
+  // demo viewers can tell at a glance the trade pipeline is hot, not stubbed.
+  return isLive ? `${base} · LIVE` : base
 }
 
 function executionBadgeVariant(layer: ExecutionLayer | undefined): 'signed' | 'verified' | 'pending' {
@@ -393,6 +403,7 @@ function TopBar() {
 
   const [layer, setLayer]     = useState<ExecutionLayer | undefined>(undefined)
   const [chainId, setChainId] = useState<number>(11155111)
+  const [isLive, setIsLive]   = useState<boolean>(false)
 
   useEffect(() => {
     let cancelled = false
@@ -401,9 +412,10 @@ function TopBar() {
         if (cancelled) return
         setLayer(cfg.executionLayer)
         setChainId(cfg.chainId)
+        setIsLive(true)
       })
       .catch(() => {
-        // /config unreachable — leave default badge.
+        // /config unreachable — leave default badge, no LIVE pill.
       })
     return () => { cancelled = true }
   }, [])
@@ -431,7 +443,8 @@ function TopBar() {
         <Badge
           variant={executionBadgeVariant(layer)}
           size="sm"
-          label={executionBadgeLabel(layer, chainId)}
+          dot={isLive}
+          label={executionBadgeLabel(layer, chainId, isLive)}
         />
         <Mono size="xs" color="secondary" as="span">
           ProofTwin · V.2.4.0

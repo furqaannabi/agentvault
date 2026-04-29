@@ -326,6 +326,26 @@ describe('e2e: chat → approve → proof', () => {
   }
 
   it('approve folds keeperhub block into proof.exec on success (FR-3)', async () => {
+    const swapReceipt = {
+      kind: 'swap' as const,
+      jobId: 'direct_demo_e2e',
+      auditTrailUrl: 'https://app.keeperhub.com/executions/direct_demo_e2e',
+      attempts: 2,
+      finalTxHash: ('0x' + 'aa'.repeat(32)) as Hex,
+      finalGasUsed: '150000',
+      status: 'success' as const,
+      network: 'sepolia' as const,
+    };
+    const approvalReceipt = {
+      kind: 'approval' as const,
+      jobId: 'direct_demo_e2e_approval',
+      auditTrailUrl: 'https://app.keeperhub.com/executions/direct_demo_e2e_approval',
+      attempts: 1,
+      finalTxHash: ('0x' + 'bb'.repeat(32)) as Hex,
+      finalGasUsed: '46000',
+      status: 'success' as const,
+      network: 'sepolia' as const,
+    };
     const khExec: ExecAdapter = {
       async swap(input: ExecSwapInput): Promise<ExecResult> {
         return {
@@ -336,15 +356,8 @@ describe('e2e: chat → approve → proof', () => {
           gasUsed: '150000',
           status: 'success',
           chainId: TEST_CHAIN_ID,
-          keeperhub: {
-            jobId: 'direct_demo_e2e',
-            auditTrailUrl: 'https://app.keeperhub.com/executions/direct_demo_e2e',
-            attempts: 2,
-            finalTxHash: ('0x' + 'aa'.repeat(32)) as Hex,
-            finalGasUsed: '150000',
-            status: 'success',
-            network: 'sepolia',
-          },
+          keeperhub: swapReceipt,
+          keeperhubReceipts: [approvalReceipt, swapReceipt],
         };
       },
     };
@@ -357,11 +370,21 @@ describe('e2e: chat → approve → proof', () => {
     const proposalId = await seedProposal(memory, testUserAddr().toLowerCase());
     const r = await postJson(app, '/approve', { proposalId }, signed);
     expect(r.status).toBe(200);
-    const proof = (r.body as { proof: { exec: { keeperhub?: { jobId: string; attempts: number; auditTrailUrl: string } } } }).proof;
+    const proof = (r.body as {
+      proof: {
+        exec: { keeperhub?: { jobId: string; attempts: number; auditTrailUrl: string } };
+        keeperhubReceipts?: { kind: string; jobId: string }[];
+      };
+    }).proof;
     expect(proof.exec.keeperhub).toBeTruthy();
     expect(proof.exec.keeperhub!.jobId).toBe('direct_demo_e2e');
     expect(proof.exec.keeperhub!.attempts).toBe(2);
     expect(proof.exec.keeperhub!.auditTrailUrl).toMatch(/keeperhub\.com/);
+    expect(proof.keeperhubReceipts).toBeTruthy();
+    expect(proof.keeperhubReceipts!).toHaveLength(2);
+    expect(proof.keeperhubReceipts![0]!.kind).toBe('approval');
+    expect(proof.keeperhubReceipts![1]!.kind).toBe('swap');
+    expect(proof.keeperhubReceipts![1]!.jobId).toBe('direct_demo_e2e');
   });
 
   it('approve surfaces keeperhubAuditUrl on exec failure (FR-4)', async () => {
@@ -377,6 +400,7 @@ describe('e2e: chat → approve → proof', () => {
           error: 'keeperhub failed: tx reverted: STF',
           chainId: TEST_CHAIN_ID,
           keeperhub: {
+            kind: 'swap',
             jobId: 'direct_demo_fail',
             auditTrailUrl: 'https://app.keeperhub.com/executions/direct_demo_fail',
             attempts: 3,
@@ -408,6 +432,133 @@ describe('e2e: chat → approve → proof', () => {
     expect(body.keeperhubAuditUrl).toMatch(/keeperhub\.com/);
     expect(body.lastRevertReason).toMatch(/STF/);
     expect(body.exec.keeperhub.status).toBe('failed');
+  });
+
+  it('?demo=force-retry propagates demoOverrides.gasLimitMultiplier=0.85 (Item 4)', async () => {
+    let capturedOverrides: { gasLimitMultiplier?: string } | undefined;
+    const captureExec: ExecAdapter = {
+      async swap(input: ExecSwapInput): Promise<ExecResult> {
+        capturedOverrides = input.demoOverrides;
+        return {
+          proposalId: input.proposal.id,
+          txHash: ('0x' + 'cc'.repeat(32)) as Hex,
+          blockNumber: 5_555_556,
+          amountOut: '180000000000000000',
+          gasUsed: '180000',
+          status: 'success',
+          chainId: TEST_CHAIN_ID,
+          keeperhub: {
+            kind: 'swap',
+            jobId: 'direct_demo_retry',
+            auditTrailUrl: 'https://app.keeperhub.com/executions/direct_demo_retry',
+            attempts: 2,
+            finalTxHash: ('0x' + 'cc'.repeat(32)) as Hex,
+            finalGasUsed: '180000',
+            status: 'success',
+            network: 'sepolia',
+          },
+        };
+      },
+    };
+    const { app, memory } = buildTestApp({
+      exec: captureExec,
+      execMode: 'keeperhub',
+      alwaysReturnSanity: true,
+    });
+    const signed = await fakeSignedSession();
+    const proposalId = await seedProposal(memory, testUserAddr().toLowerCase());
+    const r = await postJson(
+      app,
+      '/approve?demo=force-retry',
+      { proposalId },
+      signed,
+    );
+    expect(r.status).toBe(200);
+    expect(capturedOverrides).toEqual({ gasLimitMultiplier: '0.85' });
+  });
+
+  it('Accept: text/event-stream streams stage events ending with SETTLED (Item 10)', async () => {
+    const stagedExec: ExecAdapter = {
+      async swap(input: ExecSwapInput): Promise<ExecResult> {
+        input.onStage?.({ stage: 'SUBMITTING', step: 'approval', payload: { jobId: 'a1' } });
+        input.onStage?.({ stage: 'BROADCAST', step: 'approval', payload: { jobId: 'a1' } });
+        input.onStage?.({ stage: 'SUBMITTING', step: 'swap', payload: { jobId: 's1' } });
+        input.onStage?.({ stage: 'BROADCAST', step: 'swap', payload: { jobId: 's1' } });
+        input.onStage?.({ stage: 'CONFIRMING', step: 'swap' });
+        return {
+          proposalId: input.proposal.id,
+          txHash: ('0x' + 'ee'.repeat(32)) as Hex,
+          blockNumber: 5_555_558,
+          amountOut: '180000000000000000',
+          gasUsed: '180000',
+          status: 'success',
+          chainId: TEST_CHAIN_ID,
+          keeperhub: {
+            kind: 'swap',
+            jobId: 's1',
+            auditTrailUrl: 'https://app.keeperhub.com/executions/s1',
+            attempts: 1,
+            finalTxHash: ('0x' + 'ee'.repeat(32)) as Hex,
+            finalGasUsed: '180000',
+            status: 'success',
+            network: 'sepolia',
+          },
+        };
+      },
+    };
+    const { app, memory } = buildTestApp({
+      exec: stagedExec,
+      execMode: 'keeperhub',
+      alwaysReturnSanity: true,
+    });
+    const signed = await fakeSignedSession();
+    const proposalId = await seedProposal(memory, testUserAddr().toLowerCase());
+
+    const r = await app.request('/approve', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'text/event-stream',
+        authorization: sessionHeader(signed),
+      },
+      body: JSON.stringify({ proposalId }),
+    });
+    expect(r.status).toBe(200);
+    expect(r.headers.get('content-type') ?? '').toContain('text/event-stream');
+    const text = await r.text();
+    // Order is significant — verify the deterministic lifecycle hits the wire.
+    const stages = [...text.matchAll(/event:\s*([a-z_]+)/gm)].map((m) => m[1]);
+    expect(stages).toContain('policy_check');
+    expect(stages).toContain('submitting');
+    expect(stages).toContain('broadcast');
+    expect(stages).toContain('confirming');
+    expect(stages).toContain('settled');
+    expect(stages[stages.length - 1]).toBe('settled');
+    expect(text).toContain('"jobId":"s1"');
+  });
+
+  it('?demo not set leaves demoOverrides undefined (production path)', async () => {
+    let capturedOverrides: unknown = 'sentinel';
+    const captureExec: ExecAdapter = {
+      async swap(input: ExecSwapInput): Promise<ExecResult> {
+        capturedOverrides = input.demoOverrides;
+        return {
+          proposalId: input.proposal.id,
+          txHash: ('0x' + 'dd'.repeat(32)) as Hex,
+          blockNumber: 5_555_557,
+          amountOut: '180000000000000000',
+          gasUsed: '180000',
+          status: 'success',
+          chainId: TEST_CHAIN_ID,
+        };
+      },
+    };
+    const { app, memory } = buildTestApp({ exec: captureExec, alwaysReturnSanity: true });
+    const signed = await fakeSignedSession();
+    const proposalId = await seedProposal(memory, testUserAddr().toLowerCase());
+    const r = await postJson(app, '/approve', { proposalId }, signed);
+    expect(r.status).toBe(200);
+    expect(capturedOverrides).toBeUndefined();
   });
 
   it('DELETE /session revokes the nonce; subsequent calls 401', async () => {

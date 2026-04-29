@@ -167,6 +167,117 @@ export async function approveProposal(proposalId: string): Promise<Proof> {
   return proof
 }
 
+// ── Approve via SSE (Item 10) ────────────────────────────────────────────────
+
+export type ExecStage =
+  | 'POLICY_CHECK'
+  | 'SUBMITTING'
+  | 'BROADCAST'
+  | 'CONFIRMING'
+  | 'SETTLED'
+  | 'FAILED'
+
+export interface ExecStageEvent {
+  stage:    ExecStage
+  step?:    'approval' | 'swap'
+  payload?: Record<string, unknown>
+}
+
+export interface ApproveStreamHandlers {
+  onStage:    (event: ExecStageEvent) => void
+  onSettled?: (proof: Proof) => void
+  onFailed?:  (info: { error: string; keeperhubAuditUrl?: string; lastRevertReason?: string }) => void
+  /** Optional `?demo=force-retry` flag forwarded as a query param. */
+  demo?:      'force-retry'
+}
+
+/**
+ * Stream-mode wrapper around POST /approve. Sends Accept: text/event-stream
+ * so the backend emits per-stage SSE frames (POLICY_CHECK → SUBMITTING →
+ * BROADCAST → CONFIRMING → SETTLED|FAILED). Uses fetch + ReadableStream
+ * because native EventSource cannot send the Authorization header we rely
+ * on for session auth.
+ *
+ * Returns the final Proof on SETTLED. Throws on FAILED so callers can
+ * propagate via standard try/catch alongside the JSON-mode approveProposal.
+ */
+export async function approveProposalStream(
+  proposalId:  string,
+  handlers:    ApproveStreamHandlers,
+): Promise<Proof> {
+  const qs = handlers.demo ? `?demo=${handlers.demo}` : ''
+  const res = await fetch(`${API_BASE}/approve${qs}`, {
+    method:  'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept:         'text/event-stream',
+      Authorization:  getAuthHeader(),
+    },
+    body:    JSON.stringify({ proposalId }),
+  })
+  if (res.status === 401) {
+    useSessionStore.getState().clearSession()
+    throw new SessionExpiredError('expired')
+  }
+  if (!res.ok || !res.body) {
+    throw new Error(`POST /approve (stream) failed: ${res.status}`)
+  }
+
+  const reader  = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let lastEvent: ExecStageEvent | null = null
+
+  // Parse a single SSE record: event:* and data:* lines, terminator = blank line.
+  const parseRecord = (chunk: string): ExecStageEvent | null => {
+    let data = ''
+    for (const line of chunk.split('\n')) {
+      if (line.startsWith('data:')) data += line.slice(5).trim()
+    }
+    if (!data) return null
+    try {
+      return JSON.parse(data) as ExecStageEvent
+    } catch {
+      return null
+    }
+  }
+
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const records = buffer.split('\n\n')
+    buffer = records.pop() ?? ''
+    for (const record of records) {
+      const event = parseRecord(record)
+      if (!event) continue
+      lastEvent = event
+      handlers.onStage(event)
+      if (event.stage === 'FAILED') {
+        const payload = (event.payload ?? {}) as {
+          error?:           string
+          keeperhubAuditUrl?: string
+          lastRevertReason?:  string
+        }
+        handlers.onFailed?.({
+          error:             payload.error ?? 'execution failed',
+          keeperhubAuditUrl: payload.keeperhubAuditUrl,
+          lastRevertReason:  payload.lastRevertReason,
+        })
+        throw new Error(payload.error ?? 'execution failed')
+      }
+    }
+  }
+
+  if (!lastEvent || lastEvent.stage !== 'SETTLED') {
+    throw new Error('Stream closed before SETTLED — server may have died mid-trade.')
+  }
+  const proof = (lastEvent.payload as { proof?: Proof } | undefined)?.proof
+  if (!proof) throw new Error('SETTLED frame missing proof body.')
+  handlers.onSettled?.(proof)
+  return proof
+}
+
 export async function getProof(id: string): Promise<Proof> {
   const res  = await authedFetch(`/proof/${id}`)
   if (!res.ok) throw new Error(`GET /proof/${id} failed: ${res.status}`)

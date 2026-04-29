@@ -1,6 +1,21 @@
 import { mockExecResult, mockProposal, mockVerdict } from '@agentvault/mocks';
+import type { KeeperhubExecution } from '@agentvault/types';
 import { describe, expect, it } from 'vitest';
-import { canonicalize, computeRoot, hashCanonical } from '../src/hash.js';
+import { canonicalize, computeRoot, hashCanonical, hashKeeperhub } from '../src/hash.js';
+
+function mockKhReceipt(over: Partial<KeeperhubExecution> = {}): KeeperhubExecution {
+  return {
+    kind: 'swap',
+    jobId: 'direct_test_1',
+    auditTrailUrl: 'https://app.keeperhub.com/executions/direct_test_1',
+    attempts: 1,
+    finalTxHash: ('0x' + 'a'.repeat(64)) as `0x${string}`,
+    finalGasUsed: '150000',
+    status: 'success',
+    network: 'sepolia',
+    ...over,
+  };
+}
 
 describe('canonicalize', () => {
   it('sorts keys at every depth', () => {
@@ -55,15 +70,7 @@ describe('computeRoot', () => {
     const v = mockVerdict();
     const base = mockExecResult();
     const withKh = mockExecResult({
-      keeperhub: {
-        jobId: 'direct_demo_1',
-        auditTrailUrl: 'https://app.keeperhub.com/executions/direct_demo_1',
-        attempts: 2,
-        finalTxHash: ('0x' + 'a'.repeat(64)) as `0x${string}`,
-        finalGasUsed: '150000',
-        status: 'success',
-        network: 'sepolia',
-      },
+      keeperhub: mockKhReceipt({ jobId: 'direct_demo_1', attempts: 2 }),
     });
     expect(computeRoot(p, v, base)).not.toBe(computeRoot(p, v, withKh));
   });
@@ -71,19 +78,39 @@ describe('computeRoot', () => {
     const p = mockProposal();
     const v = mockVerdict();
     const e1 = mockExecResult({
-      keeperhub: {
-        jobId: 'direct_demo_2',
-        auditTrailUrl: 'https://app.keeperhub.com/executions/direct_demo_2',
-        attempts: 1,
-        finalTxHash: ('0x' + 'b'.repeat(64)) as `0x${string}`,
-        finalGasUsed: '150000',
-        status: 'success',
-        network: 'sepolia',
-      },
+      keeperhub: mockKhReceipt({ jobId: 'direct_demo_2', attempts: 1 }),
     });
     const e2 = mockExecResult({
       keeperhub: { ...e1.keeperhub!, attempts: 2 },
     });
     expect(computeRoot(p, v, e1)).not.toBe(computeRoot(p, v, e2));
+  });
+  it('rootHash differs between empty receipts and populated receipts (4-leaf, Item 3)', () => {
+    const p = mockProposal();
+    const v = mockVerdict();
+    const e = mockExecResult();
+    const empty = computeRoot(p, v, e);
+    const withReceipt = computeRoot(p, v, e, [mockKhReceipt()]);
+    expect(empty).not.toBe(withReceipt);
+  });
+  it('empty receipts and undefined receipts hash identically', () => {
+    const p = mockProposal();
+    const v = mockVerdict();
+    const e = mockExecResult();
+    expect(computeRoot(p, v, e)).toBe(computeRoot(p, v, e, []));
+  });
+  it('rootHash depends on receipts ORDER (positional binding)', () => {
+    const p = mockProposal();
+    const v = mockVerdict();
+    const e = mockExecResult();
+    const approval = mockKhReceipt({ kind: 'approval', jobId: 'direct_approval_1' });
+    const swap = mockKhReceipt({ kind: 'swap', jobId: 'direct_swap_1' });
+    const r1 = computeRoot(p, v, e, [approval, swap]);
+    const r2 = computeRoot(p, v, e, [swap, approval]);
+    expect(r1).not.toBe(r2);
+  });
+  it('hashKeeperhub returns a stable value for empty input', () => {
+    expect(hashKeeperhub([])).toBe(hashKeeperhub(undefined));
+    expect(hashKeeperhub([])).toMatch(/^0x[0-9a-f]{64}$/);
   });
 });

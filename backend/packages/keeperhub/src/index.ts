@@ -1,7 +1,8 @@
 import type { Hex } from '@agentvault/types';
 import { ethers } from 'ethers';
-import { UNIVERSAL_ROUTER_EXECUTE_ABI } from './abi.js';
+import { ERC20_APPROVE_ABI, UNIVERSAL_ROUTER_EXECUTE_ABI } from './abi.js';
 import type {
+  ExecuteApprovalInput,
   ExecuteSwapInput,
   KeeperhubClientConfig,
   KhAwaitJobOptions,
@@ -13,13 +14,18 @@ import type {
 } from './types.js';
 
 export type {
+  ExecuteApprovalInput,
   ExecuteSwapInput,
   KeeperhubClientConfig,
   KhAwaitJobOptions,
   KhJobResult,
   KhSubmitJobInput,
 } from './types.js';
-export { UNIVERSAL_ROUTER_SEPOLIA, UNIVERSAL_ROUTER_EXECUTE_ABI } from './abi.js';
+export {
+  ERC20_APPROVE_ABI,
+  UNIVERSAL_ROUTER_EXECUTE_ABI,
+  UNIVERSAL_ROUTER_SEPOLIA,
+} from './abi.js';
 
 const DEFAULT_BASE_URL = 'https://app.keeperhub.com';
 const DEFAULT_DASHBOARD_URL = 'https://app.keeperhub.com';
@@ -47,6 +53,13 @@ export interface KeeperhubClient {
   awaitJob(executionId: string, opts?: KhAwaitJobOptions): Promise<KhJobResult>;
   /** Convenience: decode Universal Router calldata and route through KeeperHub. */
   executeSwap(input: ExecuteSwapInput, opts?: KhAwaitJobOptions): Promise<KhJobResult>;
+  /**
+   * Convenience: route an ERC20 `approve(spender, amount)` through KeeperHub.
+   * Used for the Permit2 approval step that the Uniswap Trade API returns from
+   * `/check_approval`. Decodes the approval calldata locally then submits via
+   * `/api/execute/contract-call` so KH manages broadcast + retries.
+   */
+  executeApproval(input: ExecuteApprovalInput, opts?: KhAwaitJobOptions): Promise<KhJobResult>;
   readonly cfg: Required<Pick<KeeperhubClientConfig, 'baseUrl' | 'network' | 'chainId' | 'timeoutMs' | 'dashboardUrl'>>;
 }
 
@@ -91,7 +104,9 @@ export function createKeeperhubClient(config: KeeperhubClientConfig): KeeperhubC
       signal,
       headers: {
         'content-type': 'application/json',
-        authorization: `Bearer ${config.apiKey}`,
+        // KeeperHub Direct Execution API requires X-API-Key per
+        // https://docs.keeperhub.com/api/direct-execution#authentication.
+        'x-api-key': config.apiKey,
         ...(init?.headers ?? {}),
       },
     });
@@ -215,13 +230,32 @@ export function createKeeperhubClient(config: KeeperhubClientConfig): KeeperhubC
 
     const [commands, inputs, deadline] = parsed.args as unknown as [string, string[], bigint];
 
+    // gasLimitMultiplier override is the entry point for the Item 4 demo
+    // (?demo=force-retry sets it to '0.85' to provoke a real KH gas-bump retry).
     const submitted = await submitJob({
       contractAddress: input.routerAddress,
       functionName: 'execute',
       functionArgs: [commands, inputs, deadline.toString()],
       abi: UNIVERSAL_ROUTER_EXECUTE_ABI,
       value: input.value,
-      gasLimitMultiplier: '1.3',
+      gasLimitMultiplier: input.gasLimitMultiplier ?? '1.3',
+    });
+
+    return await awaitJob(submitted.executionId, opts);
+  }
+
+  async function executeApproval(
+    input: ExecuteApprovalInput,
+    opts?: KhAwaitJobOptions,
+  ): Promise<KhJobResult> {
+    assertSepolia(chainId);
+
+    const submitted = await submitJob({
+      contractAddress: input.tokenAddress,
+      functionName: 'approve',
+      functionArgs: [input.spender, input.amount],
+      abi: ERC20_APPROVE_ABI,
+      gasLimitMultiplier: input.gasLimitMultiplier ?? '1.2',
     });
 
     return await awaitJob(submitted.executionId, opts);
@@ -231,6 +265,7 @@ export function createKeeperhubClient(config: KeeperhubClientConfig): KeeperhubC
     submitJob,
     awaitJob,
     executeSwap,
+    executeApproval,
     cfg: { baseUrl, network, chainId, timeoutMs, dashboardUrl },
   };
 }

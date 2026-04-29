@@ -79,13 +79,17 @@ Backend signer never holds funds outside a single trade window. All custody stay
 
 ## Execution: KeeperHub
 
-AgentVault produces verifiable AI trade proposals. Execution is delegated to [KeeperHub](https://keeperhub.com) — the reliability layer for onchain agents (retries on revert, gas estimation, MEV-aware private routing, full audit trail). When `EXEC_MODE=keeperhub`:
+AgentVault produces verifiable AI trade proposals. Every gas-bearing onchain write is delegated to [KeeperHub](https://keeperhub.com) — the reliability layer for onchain agents (retries on revert, gas estimation, MEV-aware private routing, full audit trail). When `EXEC_MODE=keeperhub`:
 
 1. The backend runs the Uniswap Trade API quote + Permit2 sign locally (same as direct mode).
-2. Instead of `wallet.sendTransaction(swap)`, it decodes Universal Router calldata into `execute(bytes,bytes[],uint256)` and submits via `POST /api/execute/contract-call` to KeeperHub.
-3. KeeperHub broadcasts via its Turnkey-secured wallet, retrying transient failures and surfacing every attempt in its dashboard.
+2. The Permit2 approval (when needed) is decoded as `ERC20.approve(spender, amount)` and submitted via `POST /api/execute/contract-call`. KeeperHub signs and broadcasts from its Turnkey-secured wallet.
+3. The Universal Router swap is decoded as `execute(bytes,bytes[],uint256)` and submitted through the same endpoint. KeeperHub broadcasts and retries transient failures, surfacing every attempt in its dashboard.
 4. The backend polls `GET /api/execute/{id}/status` until terminal, fetches the receipt, and parses `amountOut` from ERC-20 Transfer logs.
-5. `Proof.exec.keeperhub` is populated with `{ jobId, auditTrailUrl, attempts, finalTxHash, finalGasUsed, status, network }`. This block is folded into `rootHash` via canonical hashing — verifiers can independently click through to KeeperHub's audit URL and see the same execution lifecycle.
+5. Both KeeperHub receipts (kind: `approval`, kind: `swap`) are surfaced as a top-level `Proof.keeperhubReceipts` array. They form the **4th leaf** of `rootHash`:
+   ```
+   rootHash = keccak( h(proposal) ‖ h(verdict) ‖ h(exec) ‖ h(keeperhubReceipts) )
+   ```
+   This binds KeeperHub's independent execution log into the proof cryptographically — verifiers can click through to KeeperHub's audit URL and see the same job IDs, attempt counts, and tx hashes that are baked into the rootHash. `Proof.exec.keeperhub` is kept as a back-compat alias that mirrors the swap receipt for older readers.
 
 ### Setup
 
@@ -108,19 +112,44 @@ AgentVault produces verifiable AI trade proposals. Execution is delegated to [Ke
 
 | Outcome | Backend response | Proof state |
 | --- | --- | --- |
-| KeeperHub broadcast succeeds | 200 with `proof.exec.keeperhub.status = success` | rootHash binds the keeperhub block |
+| KeeperHub broadcast succeeds | 200 with `proof.keeperhubReceipts[*].status = success` | rootHash binds the receipts leaf |
 | KeeperHub reports `failed` (tx reverted, retries exhausted) | 502 `exec_failed` with top-level `keeperhubAuditUrl` + `lastRevertReason` | no proof persisted |
 | KeeperHub reports `timeout` (poll budget exhausted) | 502 `exec_failed` | no proof persisted, `keeperhub.status = timeout` is still recoverable from the audit URL |
-| KeeperHub *submission* itself fails (network/auth) | 502 `exec_failed` unless `KEEPERHUB_FALLBACK=true`, in which case a direct ethers send replaces the broadcast and the proof omits the keeperhub block (so verifiers can detect bypass) | depends on fallback flag |
+| KeeperHub *submission* itself fails (network/auth) | 502 `exec_failed` unless `KEEPERHUB_FALLBACK=true`, in which case a direct ethers send replaces the broadcast and the proof omits the keeperhubReceipts (so verifiers can detect bypass) | depends on fallback flag |
 
-### Demo retry path
+### Live SSE progress (`Accept: text/event-stream`)
 
-To showcase retry behavior live (PRD §14):
+`POST /approve` is dual-mode. Default is JSON. With `Accept: text/event-stream` the route streams a deterministic lifecycle so the FE can render real-time sub-progress:
 
-1. Open the proof view in two windows.
-2. Set `proposal.maxSlippageBps = 1` (or pre-fund the wallet just below the swap amount) before approving — first KeeperHub attempt reverts with slippage-exceeded.
-3. KeeperHub retries with adjusted gas/slippage. The audit URL shows attempts incrementing in real time.
-4. The successful attempt produces `proof.exec.keeperhub.attempts ≥ 2` and a clickable `KEEPERHUB · 2 ATTEMPTS` badge in the proof header.
+```
+event: policy_check    data: { stage: "POLICY_CHECK", payload: { ok: true } }
+event: submitting      data: { stage: "SUBMITTING",   step: "approval", payload: { jobId, ... } }
+event: broadcast       data: { stage: "BROADCAST",    step: "approval", payload: { txHash, attempts } }
+event: submitting      data: { stage: "SUBMITTING",   step: "swap",     payload: { jobId, ... } }
+event: broadcast       data: { stage: "BROADCAST",    step: "swap",     payload: { txHash, attempts } }
+event: confirming      data: { stage: "CONFIRMING",   ... }
+event: settled         data: { stage: "SETTLED",      payload: { proof } }
+```
+
+The FE uses `fetch` + `ReadableStream` (native EventSource cannot send the `Authorization` header) and renders a 4-step strip: POLICY → SUBMIT → BROADCAST → CONFIRM. See `frontend/lib/api.ts → approveProposalStream` and `frontend/components/chat/ApprovalPrompt.tsx`.
+
+### Demo retry path: `?demo=force-retry`
+
+To showcase real KeeperHub retry behavior live (PRD §14), append `?demo=force-retry` to the approval call (the FE already forwards the URL query param):
+
+```
+POST /approve?demo=force-retry
+```
+
+This sets `gasLimitMultiplier: '0.85'` on the swap submission to KeeperHub. The first attempt under-estimates gas → out-of-gas revert → KeeperHub's retry policy bumps gas → second attempt succeeds. The successful proof carries `proof.keeperhubReceipts[].attempts ≥ 2`, the KeeperHub dashboard shows attempt history, and the FE proof header renders a clickable `KEEPERHUB · 2 ATTEMPTS` badge.
+
+Pre-demo smoke run (manual, requires Sepolia funds + funded KH Turnkey wallet):
+
+1. `pnpm dev` with `EXEC_MODE=keeperhub` and `KEEPERHUB_API_KEY` set.
+2. Connect a session, deposit USDC allowance to the delegate.
+3. Approve once normally — confirm `attempts: 1`.
+4. Approve once with `?demo=force-retry` — confirm `attempts ≥ 2` in both the proof and the KH dashboard.
+5. If the auto-retry does not fire on out-of-gas (KH retry policy is opaque), drop the flag and document that retries are observed only on transient RPC failures; the rest of the demo (LIVE pill, SSE strip, audit URL, 4-leaf rootHash) is unchanged.
 
 ### Network safety
 
