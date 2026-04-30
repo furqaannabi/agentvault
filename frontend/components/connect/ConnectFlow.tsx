@@ -313,8 +313,9 @@ export function ConnectFlow() {
         flex:           '0 0 50%',
         display:        'flex',
         flexDirection:  'column',
+        alignItems:     'center',
         justifyContent: 'center',
-        padding:        'var(--space-12) var(--space-12)',
+        padding:        'var(--space-12) var(--space-8)',
         overflowY:      'auto',
       }}>
         <div style={{ maxWidth: 400, width: '100%' }}>
