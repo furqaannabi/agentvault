@@ -5,8 +5,10 @@ import Link from 'next/link'
 import { Label, Mono, Body } from '@/components/design-system/Typography'
 import { Badge } from '@/components/design-system/Badge'
 import { useProofStore } from '@/lib/store/proofStore'
+import { useSessionStore } from '@/lib/store/sessionStore'
 import { getProofs } from '@/lib/api'
 import { useShallow } from 'zustand/react/shallow'
+import { formatSwapLabel } from '@/lib/format'
 import type { Proof } from '@/lib/types'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -55,6 +57,8 @@ function SkeletonRow() {
 function ProofRow({ proof }: { proof: Proof }) {
   const { proposal, exec } = proof
   const verdictOk = proof.verdict.ok
+  const tokens    = useSessionStore((s) => s.config?.allowedTokens ?? [])
+  const swapLabel = formatSwapLabel(proposal.amountIn, proposal.tokenIn, proposal.tokenOut, tokens)
 
   return (
     <Link href={`/proof/${proof.proposalId}`} style={{ textDecoration: 'none', display: 'block' }}>
@@ -77,7 +81,7 @@ function ProofRow({ proof }: { proof: Proof }) {
             display: 'block', marginBottom: 'var(--space-1)',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
-            SWAP {proposal.amountIn} {proposal.tokenIn} → {proposal.tokenOut}
+            {swapLabel}
           </Mono>
           <Mono size="xs" color="muted" as="span">
             {proof.proposalId.slice(0, 8).toUpperCase()}
