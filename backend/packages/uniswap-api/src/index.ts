@@ -114,7 +114,7 @@ export function createUniswapApiClient(config: UniswapApiConfig): UniswapApiClie
         tokenIn: proposal.tokenIn,
         tokenOut: proposal.tokenOut,
         swapper,
-        slippageTolerance: proposal.maxSlippageBps / 100,
+        slippageTolerance: (proposal.maxSlippageBps ?? 50) / 100,
       }),
   };
 }

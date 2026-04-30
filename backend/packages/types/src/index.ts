@@ -18,11 +18,12 @@ export interface VerifiableInference {
 export interface TradeProposal {
   id: string;
   userId: string;
-  action: 'swap';
+  action: 'swap' | 'supply' | 'borrow' | 'repay' | 'withdraw';
+  protocol?: 'uniswap' | 'aave' | 'compound';
   tokenIn: Hex;
-  tokenOut: Hex;
+  tokenOut: Hex; // Or the token being supplied/borrowed if not a swap
   amountIn: string;
-  maxSlippageBps: number;
+  maxSlippageBps?: number; // Optional since lending doesn't have slippage
   reasoning: string;
   inference: VerifiableInference;
   createdAt: number;

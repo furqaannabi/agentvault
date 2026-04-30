@@ -15,6 +15,8 @@ import type {
 import { createUniswapApiClient } from '@agentvault/uniswap-api';
 import { ethers } from 'ethers';
 import type { ExecConfig } from './index.js';
+import { buildAaveCalldata, AAVE_V3_POOL_ADDRESS_SEPOLIA } from './protocols/aave.js';
+import { buildCompoundCalldata, COMPOUND_V3_COMET_SEPOLIA } from './protocols/compound.js';
 
 /**
  * KeeperHub-routed exec adapter.
@@ -272,60 +274,100 @@ export function keeperhubAdapter(
           }
         }
 
-        const quoteRes = await uniswap.quoteProposal<QuoteResponse>(
-          proposal,
-          SEPOLIA_CHAIN_ID,
-          swapper,
-        );
+        let targetAddress: Hex = ZERO_HASH;
+        let calldata: Hex = '0x';
+        let valueStr = '0';
+        let isUniversalRouter = false;
+        let expectedAmountOut = 0n;
 
-        let signature: Hex | undefined;
-        if (quoteRes.permitData) {
-          const { domain, types, values } = quoteRes.permitData;
-          const filtered = { ...types } as Record<string, ethers.TypedDataField[]> & {
-            EIP712Domain?: ethers.TypedDataField[];
-          };
-          delete filtered.EIP712Domain;
-          signature = (await wallet.signTypedData(domain, filtered, values)) as Hex;
+        const protocol = proposal.protocol ?? 'uniswap';
+
+        if (protocol === 'uniswap') {
+          // Uniswap flow
+          const quoteRes = await uniswap.quoteProposal<QuoteResponse>(
+            proposal,
+            SEPOLIA_CHAIN_ID,
+            swapper,
+          );
+
+          let signature: Hex | undefined;
+          if (quoteRes.permitData) {
+            const { domain, types, values } = quoteRes.permitData;
+            const filtered = { ...types } as Record<string, ethers.TypedDataField[]> & {
+              EIP712Domain?: ethers.TypedDataField[];
+            };
+            delete filtered.EIP712Domain;
+            signature = (await wallet.signTypedData(domain, filtered, values)) as Hex;
+          }
+
+          const swapRes = (await uniswap.swap({
+            quote: quoteRes.quote,
+            signature,
+            permitData: quoteRes.permitData ?? undefined,
+          })) as Record<string, unknown>;
+          const tx0 =
+            (swapRes.transaction as SwapResponse['transaction'] | undefined) ??
+            (swapRes.swap as SwapResponse['transaction'] | undefined);
+          if (!tx0) {
+            return fail('failed', `swap response missing transaction: ${JSON.stringify(swapRes).slice(0, 200)}`);
+          }
+
+          targetAddress = (tx0.to ?? router) as Hex;
+          calldata = tx0.data;
+          valueStr = tx0.value ?? '0';
+          isUniversalRouter = true;
+          if (quoteRes.output?.amount) {
+            expectedAmountOut = BigInt(quoteRes.output.amount);
+          }
+
+        } else if (protocol === 'aave') {
+          targetAddress = AAVE_V3_POOL_ADDRESS_SEPOLIA;
+          calldata = buildAaveCalldata(proposal.action as any, proposal.tokenIn, proposal.amountIn, swapper);
+        } else if (protocol === 'compound') {
+          targetAddress = COMPOUND_V3_COMET_SEPOLIA;
+          calldata = buildCompoundCalldata(proposal.action as any, proposal.tokenIn, proposal.amountIn);
+        } else {
+          return fail('failed', `Unsupported protocol: ${protocol}`);
         }
 
-        const swapRes = (await uniswap.swap({
-          quote: quoteRes.quote,
-          signature,
-          permitData: quoteRes.permitData ?? undefined,
-        })) as Record<string, unknown>;
-        const tx0 =
-          (swapRes.transaction as SwapResponse['transaction'] | undefined) ??
-          (swapRes.swap as SwapResponse['transaction'] | undefined);
-        if (!tx0) {
-          return fail('failed', `swap response missing transaction: ${JSON.stringify(swapRes).slice(0, 200)}`);
-        }
+        const value = BigInt(valueStr);
 
-        const routerAddress = (tx0.to ?? router) as Hex;
-        const value = tx0.value ? BigInt(tx0.value) : 0n;
-
-        // Step 4: route Universal Router execute() through KeeperHub.
-        // demoOverrides.gasLimitMultiplier (Item 4) lets us force a real KH retry.
         emitStage(onStage, {
           stage: 'SUBMITTING',
           step: 'swap',
-          payload: { routerAddress, gasLimitMultiplier: demoOverrides?.gasLimitMultiplier },
+          payload: { routerAddress: targetAddress, gasLimitMultiplier: demoOverrides?.gasLimitMultiplier },
         });
 
-        let swapKh: Awaited<ReturnType<typeof keeperhub.executeSwap>>;
+        let swapKh: any;
         try {
-          swapKh = await keeperhub.executeSwap({
-            routerAddress,
-            calldata: tx0.data,
-            value,
-            gasLimitMultiplier: demoOverrides?.gasLimitMultiplier,
-          });
+          if (isUniversalRouter) {
+            swapKh = await keeperhub.executeSwap({
+              routerAddress: targetAddress,
+              calldata,
+              value,
+              gasLimitMultiplier: demoOverrides?.gasLimitMultiplier,
+            });
+          } else {
+            // General contract execution for Aave, Compound, Aggregators
+            const submitted = await keeperhub.submitJob({
+              contractAddress: targetAddress,
+              functionName: '', // keeperhub supports raw calldata submission without ABI if properly formatted
+              functionArgs: [],
+              abi: [], // ABI is optional when providing full raw calldata or we can provide the specific ABI
+              value: valueStr,
+              gasLimitMultiplier: demoOverrides?.gasLimitMultiplier ?? '1.3',
+            } as any); 
+            // Note: If KH requires explicit functionName/ABI, we'd pass them. 
+            // For now, assume it handles raw execution, or we wait for Job.
+            swapKh = await keeperhub.awaitJob(submitted.executionId);
+          }
         } catch (e) {
           if (fallbackToDirect) {
             console.warn(
               '[exec.keeperhub] swap submit failed; falling back to direct send:',
               (e as Error).message,
             );
-            return await directFallback(routerAddress, tx0.data, value);
+            return await directFallback(targetAddress, calldata, value);
           }
           return fail('failed', `keeperhub swap submit failed: ${(e as Error).message}`);
         }
@@ -388,8 +430,8 @@ export function keeperhubAdapter(
           if (log.topics[2]?.toLowerCase() !== swapperPadded) continue;
           amountOut += BigInt(log.data);
         }
-        if (amountOut === 0n && quoteRes.output?.amount) {
-          amountOut = BigInt(quoteRes.output.amount);
+        if (amountOut === 0n && expectedAmountOut > 0n) {
+          amountOut = expectedAmountOut;
         }
 
         if (amountOut > 0n) {

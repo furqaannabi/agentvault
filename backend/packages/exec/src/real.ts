@@ -2,6 +2,8 @@ import type { ExecAdapter, ExecResult, ExecSwapInput, Hex } from '@agentvault/ty
 import { createUniswapApiClient } from '@agentvault/uniswap-api';
 import { ethers } from 'ethers';
 import type { ExecConfig } from './index.js';
+import { buildAaveCalldata, AAVE_V3_POOL_ADDRESS_SEPOLIA } from './protocols/aave.js';
+import { buildCompoundCalldata, COMPOUND_V3_COMET_SEPOLIA } from './protocols/compound.js';
 
 /**
  * Real execution adapter using the Uniswap Trade API on an EVM testnet.
@@ -131,44 +133,61 @@ export function realAdapter(config: ExecConfig): ExecAdapter {
           if (!ar || ar.status !== 1) return fail('failed', 'approval tx failed');
         }
 
-        // 2. Quote
-        const quoteRes = await uniswap.quoteProposal<QuoteResponse>(proposal, chainId, swapper);
+        let targetAddress: Hex = ZERO_HASH;
+        let calldata: Hex = '0x';
+        let valueStr = '0';
+        let expectedAmountOut = 0n;
 
-        // 3. Optional Permit2 EIP-712 signature
-        let signature: Hex | undefined;
-        if (quoteRes.permitData) {
-          const { domain, types, values } = quoteRes.permitData;
-          // ethers.signTypedData rejects EIP712Domain in types
-          const filtered = { ...types } as Record<string, ethers.TypedDataField[]> & {
-            EIP712Domain?: ethers.TypedDataField[];
-          };
-          delete filtered.EIP712Domain;
-          signature = (await wallet.signTypedData(domain, filtered, values)) as Hex;
-        }
+        const protocol = proposal.protocol ?? 'uniswap';
 
-        // 4. Swap calldata — Uniswap requires permitData alongside signature
-        const swapRes = (await uniswap.swap({
-          quote: quoteRes.quote,
-          signature,
-          permitData: quoteRes.permitData ?? undefined,
-        })) as Record<string, unknown>;
-        console.log('[exec] swap response keys:', Object.keys(swapRes));
-        console.log('[exec] swap response sample:', JSON.stringify(swapRes).slice(0, 500));
+        if (protocol === 'uniswap') {
+          // 2. Quote
+          const quoteRes = await uniswap.quoteProposal<QuoteResponse>(proposal, chainId, swapper);
 
-        // Uniswap Trade API may return tx under .transaction or .swap
-        const tx0 =
-          (swapRes.transaction as SwapResponse['transaction'] | undefined) ??
-          (swapRes.swap as SwapResponse['transaction'] | undefined);
-        if (!tx0) {
-          return fail('failed', `swap response missing transaction: ${JSON.stringify(swapRes).slice(0, 200)}`);
+          // 3. Optional Permit2 EIP-712 signature
+          let signature: Hex | undefined;
+          if (quoteRes.permitData) {
+            const { domain, types, values } = quoteRes.permitData;
+            const filtered = { ...types } as Record<string, ethers.TypedDataField[]> & {
+              EIP712Domain?: ethers.TypedDataField[];
+            };
+            delete filtered.EIP712Domain;
+            signature = (await wallet.signTypedData(domain, filtered, values)) as Hex;
+          }
+
+          // 4. Swap calldata
+          const swapRes = (await uniswap.swap({
+            quote: quoteRes.quote,
+            signature,
+            permitData: quoteRes.permitData ?? undefined,
+          })) as Record<string, unknown>;
+          const tx0 =
+            (swapRes.transaction as SwapResponse['transaction'] | undefined) ??
+            (swapRes.swap as SwapResponse['transaction'] | undefined);
+          if (!tx0) {
+            return fail('failed', `swap response missing transaction: ${JSON.stringify(swapRes).slice(0, 200)}`);
+          }
+          targetAddress = tx0.to as Hex;
+          calldata = tx0.data;
+          valueStr = tx0.value ?? '0';
+          if (quoteRes.output?.amount) {
+            expectedAmountOut = BigInt(quoteRes.output.amount);
+          }
+        } else if (protocol === 'aave') {
+          targetAddress = AAVE_V3_POOL_ADDRESS_SEPOLIA;
+          calldata = buildAaveCalldata(proposal.action as any, proposal.tokenIn, proposal.amountIn, swapper);
+        } else if (protocol === 'compound') {
+          targetAddress = COMPOUND_V3_COMET_SEPOLIA;
+          calldata = buildCompoundCalldata(proposal.action as any, proposal.tokenIn, proposal.amountIn);
+        } else {
+          return fail('failed', `Unsupported protocol: ${protocol}`);
         }
 
         // 5. Send tx
         const tx = await wallet.sendTransaction({
-          to: tx0.to,
-          data: tx0.data,
-          value: tx0.value ? BigInt(tx0.value) : 0n,
-          gasLimit: tx0.gasLimit ? BigInt(tx0.gasLimit) : undefined,
+          to: targetAddress,
+          data: calldata,
+          value: BigInt(valueStr),
         });
         const receipt = await tx.wait();
         if (!receipt) return fail('failed', 'no receipt');
@@ -187,8 +206,8 @@ export function realAdapter(config: ExecConfig): ExecAdapter {
           if (log.topics[2]?.toLowerCase() !== swapperPadded) continue;
           amountOut += BigInt(log.data);
         }
-        if (amountOut === 0n && quoteRes.output?.amount) {
-          amountOut = BigInt(quoteRes.output.amount);
+        if (amountOut === 0n && expectedAmountOut > 0n) {
+          amountOut = expectedAmountOut;
         }
 
         // 7. Forward output to end user
