@@ -229,6 +229,37 @@ export function ConnectFlow() {
       padding:        'var(--space-8)',
       backgroundColor: 'var(--color-bg-base)',
     }}>
+      {/* ── Hero tagline ───────────────────────────────────────────── */}
+      <div style={{
+        width:         '100%',
+        maxWidth:      640,
+        textAlign:     'center',
+        marginBottom:  'var(--space-16)',
+        padding:       '0 var(--space-4)',
+      }}>
+        <p style={{
+          fontFamily:    'var(--font-display)',
+          fontWeight:    'var(--weight-bold)',
+          fontSize:      'clamp(1.5rem, 4vw, 2.5rem)',
+          lineHeight:    1.15,
+          letterSpacing: 'var(--tracking-tight)',
+          color:         'var(--color-text-primary)',
+          margin:        '0 0 var(--space-6)',
+        }}>
+          Tell the agent what you want. It plans, signs, executes
+          and proves every step.
+        </p>
+        <p style={{
+          fontFamily:    'var(--font-mono)',
+          fontSize:      'var(--text-sm)',
+          letterSpacing: 'var(--tracking-wide)',
+          color:         'var(--color-text-muted)',
+          margin:        0,
+        }}>
+          Your wallet stays yours.&nbsp;&nbsp;Your AI stays accountable.
+        </p>
+      </div>
+
       <div style={{ width: '100%', maxWidth: 480 }}>
         {/* Header */}
         <div style={{ marginBottom: 'var(--space-8)' }}>
@@ -236,9 +267,6 @@ export function ConnectFlow() {
             AGENTVAULT — SETUP
           </Label>
           <Heading size="2xl">Connect your wallet</Heading>
-          <Body size="sm" color="secondary" style={{ marginTop: 'var(--space-2)' }}>
-            Non-custodial AI portfolio manager. You keep your keys.
-          </Body>
         </div>
 
         {/* Step indicators */}
