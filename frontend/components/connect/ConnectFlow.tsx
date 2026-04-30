@@ -406,28 +406,26 @@ export function ConnectFlow() {
           </div>
         ) : null}
 
-        {/* ── Step 2 + 3: Configure + sign session ─────────────────── */}
-        {step === 2 || step === 3 ? (
+        {/* ── Step 2: Configure session bounds ─────────────────────── */}
+        {step === 2 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
             <Label color="primary" style={{ fontSize: 'var(--text-xs)' }}>
-              STEP 2 — CONFIGURE SESSION BOUNDS
+              STEP 2 — SET YOUR LIMITS
             </Label>
             <Body size="sm" color="secondary">
-              Set the limits the agent must stay within. Signed off-chain — no gas.
+              Define the policy the agent must stay within. You'll review before signing.
             </Body>
 
             {[
               { label: 'Max trade (USD)',        value: maxTradeUsd,       set: setMaxTradeUsd,       tip: 'Maximum USD value per individual trade. The agent will never execute a single swap above this amount.' },
               { label: 'Max daily volume (USD)',  value: maxDailyVolumeUsd, set: setMaxDailyVolumeUsd, tip: 'Total USD volume the agent is allowed to trade in a 24-hour rolling window.' },
-              { label: 'Max slippage (bps)',      value: maxSlippageBps,    set: setMaxSlippageBps,    tip: 'Maximum acceptable price slippage in basis points (100 bps = 1%). Trades that would exceed this slippage are rejected.' },
+              { label: 'Max slippage (bps)',      value: maxSlippageBps,    set: setMaxSlippageBps,    tip: 'Maximum acceptable price slippage in basis points (100 bps = 1%). Trades exceeding this are rejected.' },
               { label: 'Cooldown (seconds)',      value: cooldownSec,       set: setCooldownSec,       tip: 'Minimum wait time between trades in seconds. Prevents the agent from trading too frequently.' },
               { label: 'Expires in (hours)',      value: expiresHours,      set: setExpiresHours,      tip: 'How long this session stays valid. After expiry the agent stops and you must reconnect.' },
             ].map(({ label, value, set, tip }) => (
               <div key={label}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-1)' }}>
-                  <Label color="muted" style={{ fontSize: 'var(--text-xs)' }}>
-                    {label.toUpperCase()}
-                  </Label>
+                  <Label color="muted" style={{ fontSize: 'var(--text-xs)' }}>{label.toUpperCase()}</Label>
                   <InfoTip content={tip} side="right" />
                 </div>
                 <input
@@ -435,50 +433,102 @@ export function ConnectFlow() {
                   value={value}
                   onChange={(e) => set(e.target.value)}
                   style={{
-                    width:           '100%',
-                    padding:         'var(--space-2) var(--space-3)',
+                    width: '100%', padding: 'var(--space-2) var(--space-3)',
                     backgroundColor: 'var(--color-bg-elevated)',
-                    border:          'var(--border-width) solid var(--color-border)',
-                    color:           'var(--color-text-primary)',
-                    fontFamily:      'var(--font-mono)',
-                    fontSize:        'var(--text-base)',
-                    outline:         'none',
+                    border: 'var(--border-width) solid var(--color-border)',
+                    color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)',
+                    fontSize: 'var(--text-base)', outline: 'none',
                   }}
                 />
               </div>
             ))}
 
-            {config ? (
-              <div>
-                <Label color="muted" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 'var(--space-1)' }}>
-                  ALLOWED TOKENS
-                </Label>
-                {config.allowedTokens.map((t) => (
-                  <Mono key={t.address} size="xs" color="secondary" as="p" style={{ margin: '2px 0' }}>
-                    {t.symbol} — {t.address}
-                  </Mono>
-                ))}
-              </div>
-            ) : null}
-
             <button
-              onClick={handleSign}
-              disabled={busy || !config}
+              onClick={() => setStep(3)}
+              disabled={!config}
               style={{
-                padding:         'var(--space-3) var(--space-4)',
-                backgroundColor: busy || !config ? 'transparent' : 'var(--color-text-primary)',
-                border:          'var(--border-width) solid var(--color-text-primary)',
-                color:           busy || !config ? 'var(--color-text-muted)' : 'var(--color-bg-base)',
-                fontFamily:      'var(--font-mono)',
-                fontSize:        'var(--text-xs)',
-                letterSpacing:   'var(--tracking-wider)',
-                textTransform:   'uppercase',
-                cursor:          busy || !config ? 'default' : 'pointer',
-                width:           '100%',
+                padding: 'var(--space-3) var(--space-4)', width: '100%',
+                backgroundColor: !config ? 'transparent' : 'var(--color-text-primary)',
+                border: 'var(--border-width) solid var(--color-text-primary)',
+                color: !config ? 'var(--color-text-muted)' : 'var(--color-bg-base)',
+                fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)',
+                letterSpacing: 'var(--tracking-wider)', textTransform: 'uppercase',
+                cursor: !config ? 'default' : 'pointer',
               }}
             >
-              {busy ? 'SIGNING…' : 'SIGN SESSION →'}
+              REVIEW →
             </button>
+          </div>
+        ) : null}
+
+        {/* ── Step 3: Review + sign ─────────────────────────────────── */}
+        {step === 3 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+            <Label color="primary" style={{ fontSize: 'var(--text-xs)' }}>
+              STEP 3 — REVIEW &amp; SIGN
+            </Label>
+            <Body size="sm" color="secondary">
+              This is exactly what you are signing. No gas — purely off-chain.
+            </Body>
+
+            {/* Session summary card */}
+            <div style={{
+              border: 'var(--border-width) solid var(--color-border)',
+              backgroundColor: 'var(--color-bg-elevated)',
+            }}>
+              {[
+                { label: 'DELEGATE',        value: config?.delegate ?? '—' },
+                { label: 'MAX TRADE',       value: `$${maxTradeUsd}` },
+                { label: 'DAILY CAP',       value: `$${maxDailyVolumeUsd}` },
+                { label: 'MAX SLIPPAGE',    value: `${(Number(maxSlippageBps) / 100).toFixed(2)}%` },
+                { label: 'COOLDOWN',        value: `${cooldownSec}s` },
+                { label: 'EXPIRES',         value: `${expiresHours}h from now` },
+                { label: 'TOKENS',          value: config?.allowedTokens.map(t => t.symbol).join(', ') ?? '—' },
+              ].map(({ label, value }, i, arr) => (
+                <div key={label} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                  padding: 'var(--space-2) var(--space-3)',
+                  borderBottom: i < arr.length - 1 ? 'var(--border-width) solid var(--color-border-subtle)' : 'none',
+                  gap: 'var(--space-4)',
+                }}>
+                  <Label color="muted" style={{ fontSize: 'var(--text-xs)', flexShrink: 0 }}>{label}</Label>
+                  <Mono size="xs" color="primary" as="span" style={{ textAlign: 'right', wordBreak: 'break-all' }}>
+                    {value}
+                  </Mono>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
+              <button
+                onClick={() => setStep(2)}
+                style={{
+                  flex: 1, padding: 'var(--space-3) var(--space-4)',
+                  backgroundColor: 'transparent',
+                  border: 'var(--border-width) solid var(--color-border-strong)',
+                  color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)',
+                  fontSize: 'var(--text-xs)', letterSpacing: 'var(--tracking-wider)',
+                  textTransform: 'uppercase', cursor: 'pointer',
+                }}
+              >
+                ← BACK
+              </button>
+              <button
+                onClick={handleSign}
+                disabled={busy}
+                style={{
+                  flex: 2, padding: 'var(--space-3) var(--space-4)',
+                  backgroundColor: busy ? 'transparent' : 'var(--color-text-primary)',
+                  border: 'var(--border-width) solid var(--color-text-primary)',
+                  color: busy ? 'var(--color-text-muted)' : 'var(--color-bg-base)',
+                  fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)',
+                  letterSpacing: 'var(--tracking-wider)', textTransform: 'uppercase',
+                  cursor: busy ? 'default' : 'pointer',
+                }}
+              >
+                {busy ? 'SIGNING…' : 'SIGN SESSION →'}
+              </button>
+            </div>
           </div>
         ) : null}
 
