@@ -222,53 +222,109 @@ export function ConnectFlow() {
 
   return (
     <div style={{
-      display:        'flex',
-      flexDirection:  'column',
-      alignItems:     'center',
-      justifyContent: 'center',
-      minHeight:      '100vh',
-      padding:        'var(--space-8)',
+      display:         'flex',
+      minHeight:       '100vh',
       backgroundColor: 'var(--color-bg-base)',
     }}>
-      {/* ── Hero tagline ───────────────────────────────────────────── */}
+
+      {/* ── Left panel — branding ───────────────────────────────────── */}
       <div style={{
-        width:         '100%',
-        maxWidth:      640,
-        textAlign:     'center',
-        marginBottom:  'var(--space-16)',
-        padding:       '0 var(--space-4)',
+        flex:            '0 0 50%',
+        display:         'flex',
+        flexDirection:   'column',
+        justifyContent:  'space-between',
+        padding:         'var(--space-12) var(--space-12)',
+        borderRight:     'var(--border-width) solid var(--color-border)',
+        position:        'sticky',
+        top:             0,
+        height:          '100vh',
       }}>
-        <p style={{
-          fontFamily:    'var(--font-display)',
-          fontWeight:    'var(--weight-bold)',
-          fontSize:      'clamp(1.5rem, 4vw, 2.5rem)',
-          lineHeight:    1.15,
-          letterSpacing: 'var(--tracking-tight)',
-          color:         'var(--color-text-primary)',
-          margin:        '0 0 var(--space-6)',
-        }}>
-          Tell the agent what you want. It plans, signs, executes
-          and proves every step.
-        </p>
-        <p style={{
-          fontFamily:    'var(--font-mono)',
-          fontSize:      'var(--text-sm)',
-          letterSpacing: 'var(--tracking-wide)',
-          color:         'var(--color-text-muted)',
-          margin:        0,
-        }}>
-          Your wallet stays yours.&nbsp;&nbsp;Your AI stays accountable.
-        </p>
+        {/* Logo */}
+        <div>
+          <div style={{
+            fontFamily:    'var(--font-display)',
+            fontWeight:    'var(--weight-bold)',
+            fontSize:      'var(--text-base)',
+            color:         'var(--color-text-primary)',
+            letterSpacing: 'var(--tracking-tight)',
+          }}>
+            AgentVault
+          </div>
+          <div style={{
+            fontFamily:    'var(--font-mono)',
+            fontSize:      'var(--text-xs)',
+            color:         'var(--color-text-muted)',
+            letterSpacing: 'var(--tracking-wide)',
+            marginTop:     'var(--space-1)',
+            textTransform: 'uppercase',
+          }}>
+            ProofTwin · V.2.4.0
+          </div>
+        </div>
+
+        {/* Tagline */}
+        <div>
+          <p style={{
+            fontFamily:    'var(--font-display)',
+            fontWeight:    'var(--weight-bold)',
+            fontSize:      'clamp(1.6rem, 3vw, 2.2rem)',
+            lineHeight:    1.15,
+            letterSpacing: 'var(--tracking-tight)',
+            color:         'var(--color-text-primary)',
+            margin:        '0 0 var(--space-6)',
+          }}>
+            Tell the agent what you want. It plans, signs, executes and proves every step.
+          </p>
+          <p style={{
+            fontFamily:    'var(--font-mono)',
+            fontSize:      'var(--text-sm)',
+            letterSpacing: 'var(--tracking-wide)',
+            color:         'var(--color-text-muted)',
+            margin:        0,
+          }}>
+            Your wallet stays yours.{' '}
+            <span style={{ color: 'var(--color-text-secondary)' }}>
+              Your AI stays accountable.
+            </span>
+          </p>
+        </div>
+
+        {/* Feature list */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+          {[
+            { icon: '◈', text: 'Every decision cryptographically signed' },
+            { icon: '◈', text: 'Policy rules enforced before execution' },
+            { icon: '◈', text: 'Full proof chain anchored on 0G Chain' },
+          ].map(({ icon, text }) => (
+            <div key={text} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', flexShrink: 0 }}>
+                {icon}
+              </span>
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
+                {text}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <div style={{ width: '100%', maxWidth: 480 }}>
-        {/* Header */}
-        <div style={{ marginBottom: 'var(--space-8)' }}>
-          <Label color="muted" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 'var(--space-3)' }}>
-            AGENTVAULT — SETUP
-          </Label>
-          <Heading size="2xl">Connect your wallet</Heading>
-        </div>
+      {/* ── Right panel — form ──────────────────────────────────────── */}
+      <div style={{
+        flex:           '0 0 50%',
+        display:        'flex',
+        flexDirection:  'column',
+        justifyContent: 'center',
+        padding:        'var(--space-12) var(--space-12)',
+        overflowY:      'auto',
+      }}>
+        <div style={{ maxWidth: 400, width: '100%' }}>
+          {/* Header */}
+          <div style={{ marginBottom: 'var(--space-8)' }}>
+            <Label color="muted" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 'var(--space-3)' }}>
+              SETUP
+            </Label>
+            <Heading size="xl">Connect your wallet</Heading>
+          </div>
 
         {/* Step indicators */}
         <div style={{ display: 'flex', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
@@ -431,6 +487,7 @@ export function ConnectFlow() {
             ) : null}
           </div>
         ) : null}
+        </div>
       </div>
     </div>
   )
