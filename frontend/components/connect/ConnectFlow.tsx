@@ -13,6 +13,7 @@ import { maxUint256, erc20Abi } from 'viem'
 import { useRouter } from 'next/navigation'
 import { Heading, Body, Label, Mono } from '@/components/design-system/Typography'
 import { Badge } from '@/components/design-system/Badge'
+import { InfoTip } from '@/components/design-system/Tooltip'
 import { useSessionStore } from '@/lib/store/sessionStore'
 import { getConfig, validateSession } from '@/lib/api'
 import type { Config, AgentSession, SignedSession, Hex } from '@/lib/types'
@@ -312,16 +313,19 @@ export function ConnectFlow() {
             </Body>
 
             {[
-              { label: 'Max trade (USD)',        value: maxTradeUsd,       set: setMaxTradeUsd       },
-              { label: 'Max daily volume (USD)',  value: maxDailyVolumeUsd, set: setMaxDailyVolumeUsd },
-              { label: 'Max slippage (bps)',      value: maxSlippageBps,    set: setMaxSlippageBps    },
-              { label: 'Cooldown (seconds)',      value: cooldownSec,       set: setCooldownSec       },
-              { label: 'Expires in (hours)',      value: expiresHours,      set: setExpiresHours      },
-            ].map(({ label, value, set }) => (
+              { label: 'Max trade (USD)',        value: maxTradeUsd,       set: setMaxTradeUsd,       tip: 'Maximum USD value per individual trade. The agent will never execute a single swap above this amount.' },
+              { label: 'Max daily volume (USD)',  value: maxDailyVolumeUsd, set: setMaxDailyVolumeUsd, tip: 'Total USD volume the agent is allowed to trade in a 24-hour rolling window.' },
+              { label: 'Max slippage (bps)',      value: maxSlippageBps,    set: setMaxSlippageBps,    tip: 'Maximum acceptable price slippage in basis points (100 bps = 1%). Trades that would exceed this slippage are rejected.' },
+              { label: 'Cooldown (seconds)',      value: cooldownSec,       set: setCooldownSec,       tip: 'Minimum wait time between trades in seconds. Prevents the agent from trading too frequently.' },
+              { label: 'Expires in (hours)',      value: expiresHours,      set: setExpiresHours,      tip: 'How long this session stays valid. After expiry the agent stops and you must reconnect.' },
+            ].map(({ label, value, set, tip }) => (
               <div key={label}>
-                <Label color="muted" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 'var(--space-1)' }}>
-                  {label.toUpperCase()}
-                </Label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-1)' }}>
+                  <Label color="muted" style={{ fontSize: 'var(--text-xs)' }}>
+                    {label.toUpperCase()}
+                  </Label>
+                  <InfoTip content={tip} side="right" />
+                </div>
                 <input
                   type="number"
                   value={value}

@@ -12,8 +12,6 @@ interface MessageBubbleProps {
   isStreaming?: boolean
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString('en-US', {
     hour:   '2-digit',
@@ -22,26 +20,49 @@ function formatTime(timestamp: number): string {
   })
 }
 
-// ── Streaming cursor ───────────────────────────────────────────────────────────
+// ── Streaming cursor — three pulsing dots ──────────────────────────────────────
 
 function StreamCursor() {
   return (
-    <motion.span
-      aria-hidden
-      animate={{ opacity: [1, 0, 1] }}
-      transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
-      style={{
-        display:    'inline-block',
-        fontFamily: 'var(--font-mono)',
-        fontSize:   'var(--text-base)',
-        color:      'var(--color-text-primary)',
-        marginLeft: 2,
-        lineHeight: 1,
-      }}
-    >
-      ▊
-    </motion.span>
+    <span aria-hidden style={{ display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 6, verticalAlign: 'middle' }}>
+      {[0, 1, 2].map((i) => (
+        <motion.span
+          key={i}
+          animate={{ opacity: [0.2, 1, 0.2], y: [0, -3, 0] }}
+          transition={{ duration: 0.9, repeat: Infinity, ease: 'easeInOut', delay: i * 0.18 }}
+          style={{
+            display:         'inline-block',
+            width:           4,
+            height:          4,
+            borderRadius:    '50%',
+            backgroundColor: 'var(--color-text-primary)',
+            flexShrink:      0,
+          }}
+        />
+      ))}
+    </span>
   )
+}
+
+// ── Entry animation variants ───────────────────────────────────────────────────
+
+const bubbleVariants = {
+  hidden:  (isUser: boolean) => ({
+    opacity: 0,
+    x:       isUser ? 12 : -12,
+    y:       4,
+  }),
+  visible: {
+    opacity:    1,
+    x:          0,
+    y:          0,
+    transition: {
+      type:      'spring' as const,
+      stiffness: 380,
+      damping:   32,
+      mass:      0.8,
+    },
+  },
 }
 
 // ── MessageBubble ──────────────────────────────────────────────────────────────
@@ -55,75 +76,58 @@ export function MessageBubble({
   const isUser = role === 'user'
 
   return (
-    <div
+    <motion.div
+      custom={isUser}
+      variants={bubbleVariants}
+      initial="hidden"
+      animate="visible"
       style={{
-        display:       'flex',
+        display:        'flex',
         justifyContent: isUser ? 'flex-end' : 'flex-start',
-        padding:       'var(--space-2) var(--space-6)',
+        padding:        'var(--space-2) var(--space-6)',
       }}
     >
-      <div
-        style={{
-          maxWidth:   '72%',
-          minWidth:   120,
-          display:    'flex',
-          flexDirection: 'column',
-          gap:        'var(--space-2)',
-          alignItems: isUser ? 'flex-end' : 'flex-start',
-        }}
-      >
+      <div style={{
+        maxWidth:      '72%',
+        minWidth:      120,
+        display:       'flex',
+        flexDirection: 'column',
+        gap:           'var(--space-2)',
+        alignItems:    isUser ? 'flex-end' : 'flex-start',
+      }}>
         {/* Label row */}
-        <div
-          style={{
-            display:    'flex',
-            alignItems: 'center',
-            gap:        'var(--space-3)',
-          }}
-        >
-          <Label
-            color="primary"
-            style={{ fontSize: 'var(--text-xs)' }}
-          >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+          <Label color="primary" style={{ fontSize: 'var(--text-xs)' }}>
             {isUser ? 'YOU' : 'PROOFTWIN'}
           </Label>
           <time dateTime={new Date(timestamp).toISOString()}>
-            <Mono size="xs" color="muted" as="span">
-              {formatTime(timestamp)}
-            </Mono>
+            <Mono size="xs" color="muted" as="span">{formatTime(timestamp)}</Mono>
           </time>
         </div>
 
         {/* Message body */}
-        <div
-          style={{
-            backgroundColor: isUser
-              ? 'var(--color-bg-elevated)'
-              : 'var(--color-bg-surface)',
-            border:      `var(--border-width) solid var(--color-border)`,
-            borderLeft:  isUser
-              ? 'var(--border-width) solid var(--color-border)'
-              : 'var(--border-width-thick) solid var(--color-border-strong)',
-            padding:     'var(--space-3) var(--space-4)',
-          }}
-        >
-          <p
-            style={{
-              margin:     0,
-              fontFamily: 'var(--font-body)',
-              fontSize:   'var(--text-base)',
-              lineHeight: 'var(--leading-normal)',
-              color:      isUser
-                ? 'var(--color-text-secondary)'
-                : 'var(--color-text-primary)',
-              whiteSpace: 'pre-wrap',
-              wordBreak:  'break-word',
-            }}
-          >
+        <div style={{
+          backgroundColor: isUser ? 'var(--color-bg-elevated)' : 'var(--color-bg-surface)',
+          border:          `var(--border-width) solid var(--color-border)`,
+          borderLeft:      isUser
+            ? 'var(--border-width) solid var(--color-border)'
+            : 'var(--border-width-thick) solid var(--color-border-strong)',
+          padding:         'var(--space-3) var(--space-4)',
+        }}>
+          <p style={{
+            margin:     0,
+            fontFamily: 'var(--font-body)',
+            fontSize:   'var(--text-base)',
+            lineHeight: 'var(--leading-normal)',
+            color:      isUser ? 'var(--color-text-secondary)' : 'var(--color-text-primary)',
+            whiteSpace: 'pre-wrap',
+            wordBreak:  'break-word',
+          }}>
             {content}
             {isStreaming && <StreamCursor />}
           </p>
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 }
