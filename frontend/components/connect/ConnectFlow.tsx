@@ -185,7 +185,7 @@ export function ConnectFlow() {
         maxTradeUsd:       Number(maxTradeUsd),
         maxSlippageBps:    Number(maxSlippageBps),
         cooldownSec:       Number(cooldownSec),
-        expiresAt:         Date.now() + Number(expiresHours) * 3_600_000,
+        expiresAt:         Math.floor(Date.now() / 1000) + Number(expiresHours) * 3600,
         nonce,
       }
 
