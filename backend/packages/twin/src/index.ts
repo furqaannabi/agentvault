@@ -9,7 +9,14 @@ import type {
 import { ethers } from 'ethers';
 import { type TwinConfig, twinConfigFromEnv } from './config.js';
 import { type ComputeClient, makeComputeClient } from './compute.js';
-import { CHAT_PROMPT, INTENT_PROMPT, SANITY_PROMPT, SYSTEM_PROMPT, buildUserPrompt } from './prompt.js';
+import {
+  CHAT_PROMPT,
+  INTENT_PROMPT,
+  PLAN_PROMPT,
+  SANITY_PROMPT,
+  SYSTEM_PROMPT,
+  buildUserPrompt,
+} from './prompt.js';
 import { type KnownToken, extractTrade } from './extract.js';
 import { type ParsedSanity, parseIntent, parseProposal, parseSanity } from './parse.js';
 import { attestInference } from './attest.js';
@@ -62,9 +69,23 @@ export function createTwin(deps: TwinDeps): Twin {
       const tKv = Date.now();
       console.log(`[twin] kv reads: ${tKv - t0}ms`);
 
-      // Step 1: classify intent
-      const intentRaw = await compute.infer(INTENT_PROMPT, msg);
-      const intent = parseIntent(intentRaw);
+      // Step 1: classify intent with a local fast-path to reduce provider calls.
+      // Falls back to LLM intent classification only for ambiguous messages.
+      const msgLc = msg.toLowerCase();
+      const wantsImmediateExecution = /\b(execute|go ahead|approve|do it|swap now|trade now|execute this plan)\b/i.test(
+        msg,
+      );
+      const looksTradeLike = /\b(swap|rebalance|buy|sell|convert|trade|for|into| to )\b/i.test(msg);
+      const hasTokenHint = /\b(usdc|weth|eth|uni|link)\b/i.test(msg);
+      let intent: 'trade' | 'chat';
+      if (wantsImmediateExecution || (looksTradeLike && hasTokenHint)) {
+        intent = 'trade';
+      } else if (/\b(hello|hi|how|what|why|explain|help|status|portfolio)\b/i.test(msgLc)) {
+        intent = 'chat';
+      } else {
+        const intentRaw = await compute.infer(INTENT_PROMPT, msg);
+        intent = parseIntent(intentRaw);
+      }
       console.log(`[twin] intent: ${intent}`);
 
       // Step 2a: conversational reply
@@ -86,9 +107,29 @@ export function createTwin(deps: TwinDeps): Twin {
         return { kind: 'chat', reply } satisfies ChatReply;
       }
 
-      // Step 2b: trade proposal
+      // Step 2b: plan-first trade flow
       const extracted = extractTrade(msg, tokens);
       if (extracted) console.log(`[twin] extracted: ${extracted.amountIn} ${extracted.symbolIn} → ${extracted.symbolOut}`);
+      if (!wantsImmediateExecution) {
+        const planPrompt = [
+          'PORTFOLIO:',
+          portfolio ? JSON.stringify(portfolio.balances, null, 2) : '{}',
+          '',
+          `USER REQUEST: ${msg}`,
+        ].join('\n');
+        const planText = await compute.infer(PLAN_PROMPT, planPrompt);
+        const newTurn: ConvoTurn = { role: 'user', content: msg, ts: Date.now() };
+        const replyTurn: ConvoTurn = { role: 'assistant', content: planText, ts: Date.now() };
+        const updatedConvo: ConvoState = {
+          userId,
+          turns: [...(convo?.turns ?? []), newTurn, replyTurn],
+          updatedAt: Date.now(),
+        };
+        await deps.memory.setConvo(updatedConvo);
+        console.log('[twin] returned plan (awaiting explicit execution confirmation)');
+        console.log(`[twin] handle total: ${Date.now() - t0}ms`);
+        return { kind: 'chat', reply: planText } satisfies ChatReply;
+      }
 
       let tokenIn: string;
       let tokenOut: string;
@@ -113,7 +154,11 @@ export function createTwin(deps: TwinDeps): Twin {
         tokenOut = extracted.tokenOut;
         amountIn = extracted.amountIn;
         maxSlippageBps = typeof parsed.maxSlippageBps === 'number' && parsed.maxSlippageBps > 0 && parsed.maxSlippageBps <= 1000 ? parsed.maxSlippageBps : 50;
-        reasoning = typeof parsed.reasoning === 'string' && parsed.reasoning.trim() ? parsed.reasoning : `Swapping ${extracted.symbolIn} to ${extracted.symbolOut} as requested.`;
+        const baseReasoning =
+          typeof parsed.reasoning === 'string' && parsed.reasoning.trim()
+            ? parsed.reasoning
+            : `Swapping ${extracted.symbolIn} to ${extracted.symbolOut} as requested.`;
+        reasoning = `${baseReasoning} Plan basis: optimized for requested goal with conservative slippage and execution reliability.`;
         promptStr = reasoningPrompt;
       } else {
         // Ambiguous message — let LLM decide everything
