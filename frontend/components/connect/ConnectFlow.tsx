@@ -118,6 +118,46 @@ function TokenApprovalRow({ token, symbol, spender, owner, onStatusChange }: Tok
   )
 }
 
+// ── Typewriter hook ────────────────────────────────────────────────────────────
+
+function useTypewriter(text: string, speed = 22): { displayed: string; done: boolean } {
+  const [displayed, setDisplayed] = useState('')
+
+  useEffect(() => {
+    setDisplayed('')
+    let i = 0
+    const id = setInterval(() => {
+      i++
+      setDisplayed(text.slice(0, i))
+      if (i >= text.length) clearInterval(id)
+    }, speed)
+    return () => clearInterval(id)
+  }, [text, speed])
+
+  return { displayed, done: displayed.length === text.length }
+}
+
+// ── Step-specific left panel content ──────────────────────────────────────────
+
+const STEP_COPY: Record<number, { heading: string; sub: string }> = {
+  1: {
+    heading: 'Tell the agent what you want. It plans, signs, executes and proves every step.',
+    sub:     'Your wallet stays yours. Your AI stays accountable.',
+  },
+  2: {
+    heading: 'Set your limits. The agent operates within them — cryptographically enforced.',
+    sub:     'These rules are signed into your session and cannot be bypassed.',
+  },
+  3: {
+    heading: 'Sign once. The agent is bound to your policy for the lifetime of this session.',
+    sub:     'No gas. No on-chain transaction. Just a signed intent.',
+  },
+  4: {
+    heading: 'One approval per token. The agent handles every trade from here.',
+    sub:     'Your funds never leave your wallet without executing through policy first.',
+  },
+}
+
 // ── ConnectFlow ────────────────────────────────────────────────────────────────
 
 type Step = 1 | 2 | 3 | 4
@@ -130,6 +170,9 @@ export function ConnectFlow() {
   const setConfig       = useSessionStore((s) => s.setConfig)
 
   const [step, setStep]         = useState<Step>(1)
+  const copy                    = STEP_COPY[step]
+  const { displayed: typedHeading, done: headingDone } = useTypewriter(copy.heading)
+  const { displayed: typedSub }                        = useTypewriter(headingDone ? copy.sub : '', 18)
   const [config, setLocalConfig] = useState<Config | null>(null)
   const [error, setError]       = useState<string | null>(null)
   const [busy, setBusy]         = useState(false)
@@ -262,7 +305,7 @@ export function ConnectFlow() {
           </div>
         </div>
 
-        {/* Tagline */}
+        {/* Tagline — typed per step */}
         <div>
           <p style={{
             fontFamily:    'var(--font-display)',
@@ -272,8 +315,12 @@ export function ConnectFlow() {
             letterSpacing: 'var(--tracking-tight)',
             color:         'var(--color-text-primary)',
             margin:        '0 0 var(--space-6)',
+            minHeight:     '8rem',
           }}>
-            Tell the agent what you want. It plans, signs, executes and proves every step.
+            {typedHeading}
+            {!headingDone && (
+              <span style={{ opacity: 0.5, animation: 'cursor-blink 0.8s linear infinite' }}>▊</span>
+            )}
           </p>
           <p style={{
             fontFamily:    'var(--font-mono)',
@@ -282,10 +329,10 @@ export function ConnectFlow() {
             color:         'var(--color-text-muted)',
             margin:        0,
           }}>
-            Your wallet stays yours.{' '}
-            <span style={{ color: 'var(--color-text-secondary)' }}>
-              Your AI stays accountable.
-            </span>
+            {typedSub}
+            {headingDone && typedSub.length < copy.sub.length && (
+              <span style={{ opacity: 0.4, animation: 'cursor-blink 0.8s linear infinite' }}>▊</span>
+            )}
           </p>
         </div>
 
