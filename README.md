@@ -64,6 +64,22 @@ rootHash = keccak( h(proposal) ‖ h(verdict) ‖ h(exec) ‖ h(keeperhubReceipt
 
 ---
 
+
+## Deployed contracts
+
+| Contract | Network | Address | Deploy tx |
+| --- | --- | --- | --- |
+| `ProofAnchor` | 0G Galileo (`16602`) | [`0x524479ef093a9dfa6fb29f09527208ea8657a7d7`](https://chainscan-galileo.0g.ai/address/0x524479ef093a9dfa6fb29f09527208ea8657a7d7) | [`0xa67f984b…7357312d`](https://chainscan-galileo.0g.ai/tx/0xa67f984b101d7492e06a7e607039679c6c617051c78c73fa166d0b2d7357312d) |
+
+---
+
+## Testnets only
+
+Hard-coded to Ethereum Sepolia (`11155111`) and 0G Galileo (`16602`). Mainnet chainIds rejected at the chain-guard layer of every package. You cannot accidentally point this at funds you care about.
+
+---
+
+
 ## Quick start
 
 ```bash
@@ -98,46 +114,6 @@ Anyone with the proof JSON can re-check every claim:
 Any step fails → the trade did not happen the way the agent says it did.
 
 ---
-
-## Testnets only
-
-Hard-coded to Ethereum Sepolia (`11155111`) and 0G Galileo (`16602`). Mainnet chainIds rejected at the chain-guard layer of every package. You cannot accidentally point this at funds you care about.
-
----
-
-## Architecture
-
-```
-┌─────────┐     chat       ┌──────────┐                   ┌──────────┐
-│  user   ├───────────────▶│  twin    │  signed inference │  policy  │
-│ wallet  │                │ (0G LLM) ├──────────────────▶│  engine  │
-└────┬────┘                └──────────┘                   └────┬─────┘
-     │ EIP-712 AgentSession (off-chain, no gas)                │ verdict (signed)
-     │ ERC-20 allowance (one-time, to delegate)                ▼
-     │                                          ┌────────────────────────┐
-     └─────────── /approve ────────────────────▶│   keeperhub adapter    │
-                                                │  ┌──────────────────┐  │
-                                                │  │ transferFrom user│ ─┼─── direct ethers
-                                                │  ├──────────────────┤  │
-                                                │  │ Permit2 approve  │ ─┼──▶ KeeperHub
-                                                │  ├──────────────────┤  │
-                                                │  │ Uniswap swap     │ ─┼──▶ KeeperHub
-                                                │  ├──────────────────┤  │     (retry, gas-bump, audit)
-                                                │  │ transfer to user │ ─┼─── direct ethers
-                                                │  └──────────────────┘  │
-                                                └───────────┬────────────┘
-                                                            ▼
-                                                ┌────────────────────────┐
-                                                │ assembleProof          │
-                                                │   rootHash = keccak(   │
-                                                │     h(proposal) ‖      │
-                                                │     h(verdict)  ‖      │
-                                                │     h(exec)     ‖      │
-                                                │     h(keeperhubReceipts)│
-                                                │   )                    │
-                                                │ anchor on 0G chain ────┼──▶ ProofAnchor.sol
-                                                └────────────────────────┘
-```
 
 ### What's verifiable, where it lives
 
