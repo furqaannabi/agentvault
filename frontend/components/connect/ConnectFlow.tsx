@@ -13,6 +13,7 @@ import { maxUint256, erc20Abi } from 'viem'
 import { useRouter } from 'next/navigation'
 import { Heading, Body, Label, Mono } from '@/components/design-system/Typography'
 import { Badge } from '@/components/design-system/Badge'
+import { InfoTip } from '@/components/design-system/Tooltip'
 import { useSessionStore } from '@/lib/store/sessionStore'
 import { getConfig, validateSession } from '@/lib/api'
 import type { Config, AgentSession, SignedSession, Hex } from '@/lib/types'
@@ -117,6 +118,46 @@ function TokenApprovalRow({ token, symbol, spender, owner, onStatusChange }: Tok
   )
 }
 
+// ── Typewriter hook ────────────────────────────────────────────────────────────
+
+function useTypewriter(text: string, speed = 22): { displayed: string; done: boolean } {
+  const [displayed, setDisplayed] = useState('')
+
+  useEffect(() => {
+    setDisplayed('')
+    let i = 0
+    const id = setInterval(() => {
+      i++
+      setDisplayed(text.slice(0, i))
+      if (i >= text.length) clearInterval(id)
+    }, speed)
+    return () => clearInterval(id)
+  }, [text, speed])
+
+  return { displayed, done: displayed.length === text.length }
+}
+
+// ── Step-specific left panel content ──────────────────────────────────────────
+
+const STEP_COPY: Record<number, { heading: string; sub: string }> = {
+  1: {
+    heading: 'Tell the agent what you want. It plans, signs, executes and proves every step.',
+    sub:     'Your wallet stays yours. Your AI stays accountable.',
+  },
+  2: {
+    heading: 'Set your limits. The agent operates within them — cryptographically enforced.',
+    sub:     'These rules are signed into your session and cannot be bypassed.',
+  },
+  3: {
+    heading: 'Sign once. The agent is bound to your policy for the lifetime of this session.',
+    sub:     'No gas. No on-chain transaction. Just a signed intent.',
+  },
+  4: {
+    heading: 'One approval per token. The agent handles every trade from here.',
+    sub:     'Your funds never leave your wallet without executing through policy first.',
+  },
+}
+
 // ── ConnectFlow ────────────────────────────────────────────────────────────────
 
 type Step = 1 | 2 | 3 | 4
@@ -129,6 +170,9 @@ export function ConnectFlow() {
   const setConfig       = useSessionStore((s) => s.setConfig)
 
   const [step, setStep]         = useState<Step>(1)
+  const copy                    = STEP_COPY[step]
+  const { displayed: typedHeading, done: headingDone } = useTypewriter(copy.heading)
+  const { displayed: typedSub }                        = useTypewriter(headingDone ? copy.sub : '', 18)
   const [config, setLocalConfig] = useState<Config | null>(null)
   const [error, setError]       = useState<string | null>(null)
   const [busy, setBusy]         = useState(false)
@@ -185,7 +229,7 @@ export function ConnectFlow() {
         maxTradeUsd:       Number(maxTradeUsd),
         maxSlippageBps:    Number(maxSlippageBps),
         cooldownSec:       Number(cooldownSec),
-        expiresAt:         Date.now() + Number(expiresHours) * 3_600_000,
+        expiresAt:         Math.floor(Date.now() / 1000) + Number(expiresHours) * 3600,
         nonce,
       }
 
@@ -221,25 +265,114 @@ export function ConnectFlow() {
 
   return (
     <div style={{
-      display:        'flex',
-      flexDirection:  'column',
-      alignItems:     'center',
-      justifyContent: 'center',
-      minHeight:      '100vh',
-      padding:        'var(--space-8)',
+      display:         'flex',
+      minHeight:       '100vh',
       backgroundColor: 'var(--color-bg-base)',
     }}>
-      <div style={{ width: '100%', maxWidth: 480 }}>
-        {/* Header */}
-        <div style={{ marginBottom: 'var(--space-8)' }}>
-          <Label color="muted" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 'var(--space-3)' }}>
-            AGENTVAULT — SETUP
-          </Label>
-          <Heading size="2xl">Connect your wallet</Heading>
-          <Body size="sm" color="secondary" style={{ marginTop: 'var(--space-2)' }}>
-            Non-custodial AI portfolio manager. You keep your keys.
-          </Body>
+
+      {/* ── Left panel — branding ───────────────────────────────────── */}
+      <div style={{
+        flex:            '0 0 50%',
+        display:         'flex',
+        flexDirection:   'column',
+        justifyContent:  'space-between',
+        padding:         'var(--space-12) var(--space-12)',
+        borderRight:     'var(--border-width) solid var(--color-border)',
+        position:        'sticky',
+        top:             0,
+        height:          '100vh',
+      }}>
+        {/* Logo */}
+        <div>
+          <div style={{
+            fontFamily:    'var(--font-display)',
+            fontWeight:    'var(--weight-bold)',
+            fontSize:      'var(--text-base)',
+            color:         'var(--color-text-primary)',
+            letterSpacing: 'var(--tracking-tight)',
+          }}>
+            AgentVault
+          </div>
+          <div style={{
+            fontFamily:    'var(--font-mono)',
+            fontSize:      'var(--text-xs)',
+            color:         'var(--color-text-muted)',
+            letterSpacing: 'var(--tracking-wide)',
+            marginTop:     'var(--space-1)',
+            textTransform: 'uppercase',
+          }}>
+            ProofTwin · V.2.4.0
+          </div>
         </div>
+
+        {/* Tagline — typed per step */}
+        <div>
+          <p style={{
+            fontFamily:    'var(--font-display)',
+            fontWeight:    'var(--weight-bold)',
+            fontSize:      'clamp(1.6rem, 3vw, 2.2rem)',
+            lineHeight:    1.15,
+            letterSpacing: 'var(--tracking-tight)',
+            color:         'var(--color-text-primary)',
+            margin:        '0 0 var(--space-6)',
+            minHeight:     '8rem',
+          }}>
+            {typedHeading}
+            {!headingDone && (
+              <span style={{ opacity: 0.5, animation: 'cursor-blink 0.8s linear infinite' }}>▊</span>
+            )}
+          </p>
+          <p style={{
+            fontFamily:    'var(--font-mono)',
+            fontSize:      'var(--text-sm)',
+            letterSpacing: 'var(--tracking-wide)',
+            color:         'var(--color-text-muted)',
+            margin:        0,
+          }}>
+            {typedSub}
+            {headingDone && typedSub.length < copy.sub.length && (
+              <span style={{ opacity: 0.4, animation: 'cursor-blink 0.8s linear infinite' }}>▊</span>
+            )}
+          </p>
+        </div>
+
+        {/* Feature list */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+          {[
+            { icon: '◈', text: 'Every decision cryptographically signed' },
+            { icon: '◈', text: 'Policy rules enforced before execution' },
+            { icon: '◈', text: 'Full proof chain anchored on 0G Chain' },
+          ].map(({ icon, text }) => (
+            <div key={text} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', flexShrink: 0 }}>
+                {icon}
+              </span>
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
+                {text}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Right panel — form ──────────────────────────────────────── */}
+      <div style={{
+        flex:           '0 0 50%',
+        display:        'flex',
+        flexDirection:  'column',
+        alignItems:     'center',
+        justifyContent: 'center',
+        padding:        'var(--space-12) var(--space-8)',
+        overflowY:      'auto',
+      }}>
+        <div style={{ maxWidth: 400, width: '100%' }}>
+          {/* Header */}
+          <div style={{ marginBottom: 'var(--space-8)' }}>
+            <Label color="muted" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 'var(--space-3)' }}>
+              SETUP
+            </Label>
+            <Heading size="xl">Connect your wallet</Heading>
+          </div>
 
         {/* Step indicators */}
         <div style={{ display: 'flex', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
@@ -273,76 +406,129 @@ export function ConnectFlow() {
           </div>
         ) : null}
 
-        {/* ── Step 2 + 3: Configure + sign session ─────────────────── */}
-        {step === 2 || step === 3 ? (
+        {/* ── Step 2: Configure session bounds ─────────────────────── */}
+        {step === 2 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
             <Label color="primary" style={{ fontSize: 'var(--text-xs)' }}>
-              STEP 2 — CONFIGURE SESSION BOUNDS
+              STEP 2 — SET YOUR LIMITS
             </Label>
             <Body size="sm" color="secondary">
-              Set the limits the agent must stay within. Signed off-chain — no gas.
+              Define the policy the agent must stay within. You'll review before signing.
             </Body>
 
             {[
-              { label: 'Max trade (USD)',        value: maxTradeUsd,       set: setMaxTradeUsd       },
-              { label: 'Max daily volume (USD)',  value: maxDailyVolumeUsd, set: setMaxDailyVolumeUsd },
-              { label: 'Max slippage (bps)',      value: maxSlippageBps,    set: setMaxSlippageBps    },
-              { label: 'Cooldown (seconds)',      value: cooldownSec,       set: setCooldownSec       },
-              { label: 'Expires in (hours)',      value: expiresHours,      set: setExpiresHours      },
-            ].map(({ label, value, set }) => (
+              { label: 'Max trade (USD)',        value: maxTradeUsd,       set: setMaxTradeUsd,       tip: 'Maximum USD value per individual trade. The agent will never execute a single swap above this amount.' },
+              { label: 'Max daily volume (USD)',  value: maxDailyVolumeUsd, set: setMaxDailyVolumeUsd, tip: 'Total USD volume the agent is allowed to trade in a 24-hour rolling window.' },
+              { label: 'Max slippage (bps)',      value: maxSlippageBps,    set: setMaxSlippageBps,    tip: 'Maximum acceptable price slippage in basis points (100 bps = 1%). Trades exceeding this are rejected.' },
+              { label: 'Cooldown (seconds)',      value: cooldownSec,       set: setCooldownSec,       tip: 'Minimum wait time between trades in seconds. Prevents the agent from trading too frequently.' },
+              { label: 'Expires in (hours)',      value: expiresHours,      set: setExpiresHours,      tip: 'How long this session stays valid. After expiry the agent stops and you must reconnect.' },
+            ].map(({ label, value, set, tip }) => (
               <div key={label}>
-                <Label color="muted" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 'var(--space-1)' }}>
-                  {label.toUpperCase()}
-                </Label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-1)' }}>
+                  <Label color="muted" style={{ fontSize: 'var(--text-xs)' }}>{label.toUpperCase()}</Label>
+                  <InfoTip content={tip} side="right" />
+                </div>
                 <input
                   type="number"
                   value={value}
                   onChange={(e) => set(e.target.value)}
                   style={{
-                    width:           '100%',
-                    padding:         'var(--space-2) var(--space-3)',
+                    width: '100%', padding: 'var(--space-2) var(--space-3)',
                     backgroundColor: 'var(--color-bg-elevated)',
-                    border:          'var(--border-width) solid var(--color-border)',
-                    color:           'var(--color-text-primary)',
-                    fontFamily:      'var(--font-mono)',
-                    fontSize:        'var(--text-base)',
-                    outline:         'none',
+                    border: 'var(--border-width) solid var(--color-border)',
+                    color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)',
+                    fontSize: 'var(--text-base)', outline: 'none',
                   }}
                 />
               </div>
             ))}
 
-            {config ? (
-              <div>
-                <Label color="muted" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 'var(--space-1)' }}>
-                  ALLOWED TOKENS
-                </Label>
-                {config.allowedTokens.map((t) => (
-                  <Mono key={t.address} size="xs" color="secondary" as="p" style={{ margin: '2px 0' }}>
-                    {t.symbol} — {t.address}
-                  </Mono>
-                ))}
-              </div>
-            ) : null}
-
             <button
-              onClick={handleSign}
-              disabled={busy || !config}
+              onClick={() => setStep(3)}
+              disabled={!config}
               style={{
-                padding:         'var(--space-3) var(--space-4)',
-                backgroundColor: busy || !config ? 'transparent' : 'var(--color-text-primary)',
-                border:          'var(--border-width) solid var(--color-text-primary)',
-                color:           busy || !config ? 'var(--color-text-muted)' : 'var(--color-bg-base)',
-                fontFamily:      'var(--font-mono)',
-                fontSize:        'var(--text-xs)',
-                letterSpacing:   'var(--tracking-wider)',
-                textTransform:   'uppercase',
-                cursor:          busy || !config ? 'default' : 'pointer',
-                width:           '100%',
+                padding: 'var(--space-3) var(--space-4)', width: '100%',
+                backgroundColor: !config ? 'transparent' : 'var(--color-text-primary)',
+                border: 'var(--border-width) solid var(--color-text-primary)',
+                color: !config ? 'var(--color-text-muted)' : 'var(--color-bg-base)',
+                fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)',
+                letterSpacing: 'var(--tracking-wider)', textTransform: 'uppercase',
+                cursor: !config ? 'default' : 'pointer',
               }}
             >
-              {busy ? 'SIGNING…' : 'SIGN SESSION →'}
+              REVIEW →
             </button>
+          </div>
+        ) : null}
+
+        {/* ── Step 3: Review + sign ─────────────────────────────────── */}
+        {step === 3 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+            <Label color="primary" style={{ fontSize: 'var(--text-xs)' }}>
+              STEP 3 — REVIEW &amp; SIGN
+            </Label>
+            <Body size="sm" color="secondary">
+              This is exactly what you are signing. No gas — purely off-chain.
+            </Body>
+
+            {/* Session summary card */}
+            <div style={{
+              border: 'var(--border-width) solid var(--color-border)',
+              backgroundColor: 'var(--color-bg-elevated)',
+            }}>
+              {[
+                { label: 'DELEGATE',        value: config?.delegate ?? '—' },
+                { label: 'MAX TRADE',       value: `$${maxTradeUsd}` },
+                { label: 'DAILY CAP',       value: `$${maxDailyVolumeUsd}` },
+                { label: 'MAX SLIPPAGE',    value: `${(Number(maxSlippageBps) / 100).toFixed(2)}%` },
+                { label: 'COOLDOWN',        value: `${cooldownSec}s` },
+                { label: 'EXPIRES',         value: `${expiresHours}h from now` },
+                { label: 'TOKENS',          value: config?.allowedTokens.map(t => t.symbol).join(', ') ?? '—' },
+              ].map(({ label, value }, i, arr) => (
+                <div key={label} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                  padding: 'var(--space-2) var(--space-3)',
+                  borderBottom: i < arr.length - 1 ? 'var(--border-width) solid var(--color-border-subtle)' : 'none',
+                  gap: 'var(--space-4)',
+                }}>
+                  <Label color="muted" style={{ fontSize: 'var(--text-xs)', flexShrink: 0 }}>{label}</Label>
+                  <Mono size="xs" color="primary" as="span" style={{ textAlign: 'right', wordBreak: 'break-all' }}>
+                    {value}
+                  </Mono>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
+              <button
+                onClick={() => setStep(2)}
+                style={{
+                  flex: 1, padding: 'var(--space-3) var(--space-4)',
+                  backgroundColor: 'transparent',
+                  border: 'var(--border-width) solid var(--color-border-strong)',
+                  color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)',
+                  fontSize: 'var(--text-xs)', letterSpacing: 'var(--tracking-wider)',
+                  textTransform: 'uppercase', cursor: 'pointer',
+                }}
+              >
+                ← BACK
+              </button>
+              <button
+                onClick={handleSign}
+                disabled={busy}
+                style={{
+                  flex: 2, padding: 'var(--space-3) var(--space-4)',
+                  backgroundColor: busy ? 'transparent' : 'var(--color-text-primary)',
+                  border: 'var(--border-width) solid var(--color-text-primary)',
+                  color: busy ? 'var(--color-text-muted)' : 'var(--color-bg-base)',
+                  fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)',
+                  letterSpacing: 'var(--tracking-wider)', textTransform: 'uppercase',
+                  cursor: busy ? 'default' : 'pointer',
+                }}
+              >
+                {busy ? 'SIGNING…' : 'SIGN SESSION →'}
+              </button>
+            </div>
           </div>
         ) : null}
 
@@ -399,6 +585,7 @@ export function ConnectFlow() {
             ) : null}
           </div>
         ) : null}
+        </div>
       </div>
     </div>
   )

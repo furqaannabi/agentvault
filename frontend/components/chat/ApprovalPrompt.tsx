@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Heading, Body, Label, Mono } from '@/components/design-system/Typography'
+import { formatTokenAmount, tokenSymbol } from '@/lib/format'
 import {
   type ExecStage,
   type ExecStageEvent,
@@ -146,25 +147,13 @@ export function ApprovalPrompt({
 
   const busy = status === 'approving' || status === 'rejecting'
 
-  const tIn  = config?.allowedTokens.find((t) => t.address.toLowerCase() === proposal.tokenIn.toLowerCase())
-  const tOut = config?.allowedTokens.find((t) => t.address.toLowerCase() === proposal.tokenOut.toLowerCase())
-
-  const inSymbol  = tIn?.symbol ?? `${proposal.tokenIn.slice(0, 6)}…`
-  const outSymbol = tOut?.symbol ?? `${proposal.tokenOut.slice(0, 6)}…`
-
-  let formattedAmount = proposal.amountIn
-  if (tIn) {
-    try {
-      const raw = BigInt(proposal.amountIn)
-      const divisor = 10n ** BigInt(tIn.decimals)
-      const whole = raw / divisor
-      const frac = raw % divisor
-      const fracStr = frac.toString().padStart(tIn.decimals, '0').slice(0, 4).replace(/0+$/, '')
-      formattedAmount = fracStr.length > 0 ? `${whole}.${fracStr}` : `${whole}`
-    } catch {
-      // Fallback
-    }
-  }
+  const tokens          = config?.allowedTokens ?? []
+  const tIn             = tokens.find((t) => t.address.toLowerCase() === proposal.tokenIn.toLowerCase())
+  const inSymbol        = tokenSymbol(proposal.tokenIn,  tokens)
+  const outSymbol       = tokenSymbol(proposal.tokenOut, tokens)
+  const formattedAmount = tIn
+    ? formatTokenAmount(proposal.amountIn, tIn.decimals)
+    : proposal.amountIn
 
   function handleStage(event: ExecStageEvent) {
     const step = stageToStep(event.stage)

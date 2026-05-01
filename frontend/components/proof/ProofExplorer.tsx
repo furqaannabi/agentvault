@@ -8,6 +8,8 @@ import { PolicyChecklist } from '@/components/policy/PolicyChecklist'
 import { ProofChain } from '@/components/proof/ProofChain'
 import { getProof } from '@/lib/api'
 import { useProofStore } from '@/lib/store/proofStore'
+import { useSessionStore } from '@/lib/store/sessionStore'
+import { formatTokenAmount, formatSwapLabel, tokenSymbol } from '@/lib/format'
 import type { Proof, ProofStep } from '@/lib/types'
 
 // ── Proof → ProofSteps mapping ─────────────────────────────────────────────────
@@ -119,7 +121,13 @@ function SectionSkeleton({ lines = 3 }: { lines?: number }) {
 function TradeSummary({ proof }: { proof: Proof }) {
   const { proposal, exec } = proof
   const slippage = (proposal.maxSlippageBps / 100).toFixed(2)
-  const kh = exec.keeperhub
+  const kh       = exec.keeperhub
+  const tokens   = useSessionStore((s) => s.config?.allowedTokens ?? [])
+  const tIn      = tokens.find((t) => t.address.toLowerCase() === proposal.tokenIn.toLowerCase())
+  const tOut     = tokens.find((t) => t.address.toLowerCase() === proposal.tokenOut.toLowerCase())
+  const swapLabel = formatSwapLabel(proposal.amountIn, proposal.tokenIn, proposal.tokenOut, tokens)
+  const amtOut   = tOut ? formatTokenAmount(exec.amountOut, tOut.decimals) : exec.amountOut
+  const symOut   = tokenSymbol(proposal.tokenOut, tokens)
 
   return (
     <div
@@ -167,7 +175,7 @@ function TradeSummary({ proof }: { proof: Proof }) {
       <div style={{ padding: 'var(--space-5) var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
         {/* Trade display */}
         <Heading size="2xl" style={{ letterSpacing: 'var(--tracking-tight)' }}>
-          SWAP {proposal.amountIn} {proposal.tokenIn} → {proposal.tokenOut}
+          {swapLabel}
         </Heading>
 
         {/* Metadata row */}
@@ -178,7 +186,7 @@ function TradeSummary({ proof }: { proof: Proof }) {
           </div>
           <div>
             <Label color="muted" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 'var(--space-1)' }}>RECEIVED</Label>
-            <Mono size="sm" color="primary" as="span">{exec.amountOut} {proposal.tokenOut}</Mono>
+            <Mono size="sm" color="primary" as="span">{amtOut} {symOut}</Mono>
           </div>
           <div>
             <Label color="muted" style={{ fontSize: 'var(--text-xs)', display: 'block', marginBottom: 'var(--space-1)' }}>BLOCK</Label>

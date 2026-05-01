@@ -13,7 +13,7 @@ export interface AgentSession {
   maxTradeUsd:        number
   maxSlippageBps:     number
   cooldownSec:        number
-  expiresAt:          number    // unix ms
+  expiresAt:          number    // unix seconds
   nonce:              Hex       // random 32 bytes
 }
 
