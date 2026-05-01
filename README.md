@@ -1,12 +1,13 @@
-# AgentVault
+**AI portfolio manager with cryptographic receipts. Every trade signed, logged, auditable—trust math, not promises**
 
-**An AI portfolio manager you can actually verify.**
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/94905d5e-6988-4e2c-bafa-9dd9629bec99" />
 
 You chat. It trades. Every decision leaves a cryptographic receipt — *who reasoned, who approved, who broadcast, what landed onchain*.
 
 No screenshots. No "trust me." Just proofs.
 
----
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/7ca7582b-5143-4c7d-9212-941b176fa934" />
+
 
 ## Why this matters
 
@@ -21,6 +22,9 @@ AgentVault flips that. Every trade produces a public, independently checkable re
 - **All four are bound together** — one rootHash anchored on 0G Galileo. Tamper with any leaf, the root breaks.
 
 If the agent lies, the math says so.
+
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/014d90a2-0b9d-4fe6-abf4-cf8ba873469b" />
+
 
 ---
 
