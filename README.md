@@ -23,6 +23,15 @@ Most "AI agent" demos are black boxes. You see the chat reply; you trust the scr
 
 All of those URLs are clickable from the FE Proof Explorer.
 
+## Twin: plan-first chat
+
+The twin is **two-turn by design**, not single-shot:
+
+1. *"rebalance ~$50 USDC into ETH"* → the twin replies with a natural-language **plan**. No `TradeProposal` is created, no inference is signed for execution, no policy verdict is requested. The plan is appended to convo memory in 0G KV.
+2. *"execute this plan"* / *"do it"* / *"go ahead"* / *"approve"* → the twin re-extracts the trade spec from the prior turn (so token amounts and decimals come from the original request, not a re-guess), produces a signed `VerifiableInference`, and returns a `TradeProposal`.
+
+Why: it removes the "LLM hallucinated an amount with wrong decimals on a follow-up" failure mode, and ensures no proposal is signed without an explicit user execute trigger. Intent classification uses a local regex fast-path (token symbols + execute trigger words) and falls back to an LLM intent prompt only for ambiguous messages — see [`backend/packages/twin/src/index.ts`](./backend/packages/twin/src/index.ts).
+
 ## How it works
 
 ```
@@ -165,7 +174,7 @@ AgentVault is hard-coded to Ethereum Sepolia (`chainId 11155111`) and 0G Galileo
 
 ## Status
 
-**Phase 1 (current):** chat → propose → approve → swap (mock | real | keeperhub) → proof anchored on 0G; FE Proof Explorer shows full chain.
+**Phase 1 (current):** chat → plan → confirm → propose → approve → swap (mock | real | keeperhub) → proof anchored on 0G; FE Proof Explorer shows full chain.
 
 **Phase 2 (deferred):** specialist swarm, ledger-backed dailyCap/cooldown, KeeperHub workflows for x402 + private routing.
 
@@ -219,35 +228,6 @@ AgentVault is submitted to **[ETHGlobal Open Agents 2026](https://ethglobal.com/
 
 Honest, specific, actionable feedback covering UX friction, a P0 documentation defect (auth header), retry-policy opacity, missing log decoding, and concrete feature requests (SSE status, raw calldata mode, batch submission). See [`FEEDBACK.md`](./FEEDBACK.md) → Section 2.
 
-### Submission checklist
-
-Per the hackathon's qualification requirements across the four tracks:
-
-- [x] **Public GitHub repo with README** — this README + [`backend/README.md`](./backend/README.md)
-- [x] **Setup instructions** — [`backend/README.md`](./backend/README.md) → Setup
-- [x] **Architecture diagram** — see [How it works](#how-it-works) above
-- [x] **`FEEDBACK.md` in repo root** (Uniswap requirement) — [`FEEDBACK.md`](./FEEDBACK.md)
-- [x] **Brief write-up of approach + KH integration** (KeeperHub requirement) — see [Tracks targeted](#-tracks-targeted) and [Execution: KeeperHub](#execution-modes) sections
-- [x] **Working examples + clear documentation** — package-level READMEs in `backend/packages/exec/` and `backend/packages/uniswap-api/`
-- [ ] **Demo video (≤ 3 min)** — script ready in [`VIDEO_SCRIPT.md`](./VIDEO_SCRIPT.md); upload pending — see [Demo](#demo) below
-- [ ] **Live demo link** — see [Demo](#demo) below
-- [x] **Contract deployment addresses** — see [Deployments](#deployments) below
-- [ ] **Team member names + contact** (Telegram & X) — see [Team](#team) below
-
-### Demo
-
-- **Live demo:** _TBD — replace with deployed URL before submission._
-- **Demo video (≤ 3 min):** _TBD — replace with YouTube/Loom URL before submission._
-- **Video script:** [`VIDEO_SCRIPT.md`](./VIDEO_SCRIPT.md) — full 4-minute narration with timing marks, pre-flight checklist, OBS layout, 3-min and 5-min cuts.
-- **Demo flow:**
-  1. Connect wallet (Sepolia), approve USDC allowance to delegate, sign `AgentSession`.
-  2. Chat: *"rebalance ~$50 of USDC into ETH with at most 0.5% slippage"*.
-  3. Twin proposes; policy engine signs verdict.
-  4. Click APPROVE on the trade card. The 4-step SSE strip lights up POLICY → SUBMIT → BROADCAST → CONFIRM in real time.
-  5. Open KeeperHub dashboard side-by-side — see `attempts: 1`, the same `jobId` as in the proof.
-  6. Open Proof Explorer — click the KEEPERHUB audit-trail badge → it deep-links to the same KH dashboard entry. Click the 0G anchor tx → the rootHash on-chain matches the one shown in the proof header.
-  7. Re-run with `?demo=force-retry` — KH dashboard now shows `attempts: 2`, the proof header badge reads `KEEPERHUB · 2 ATTEMPTS`.
-
 ### Deployments
 
 | Component | Network | Address / hash |
@@ -256,11 +236,6 @@ Per the hackathon's qualification requirements across the four tracks:
 | KeeperHub Turnkey wallet | Ethereum Sepolia (chainId `11155111`) | _TBD — copy from `app.keeperhub.com` Settings → Wallets_ |
 | Backend delegate signer | Ethereum Sepolia (chainId `11155111`) | _TBD — derived from `SEPOLIA_PRIVATE_KEY`_ |
 
-### Team
-
-| Role | Name | Telegram | X |
-| --- | --- | --- | --- |
-| _TBD_ | _TBD_ | _TBD_ | _TBD_ |
 
 ### Protocols / SDKs used
 

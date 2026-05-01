@@ -50,7 +50,7 @@ Public:
 - `GET /health` — liveness
 
 Authenticated (`Authorization: Session <base64(SignedSession)>`):
-- `POST /chat` — `{ msg }` → `{ proposal }`
+- `POST /chat` — `{ msg }` → `{ reply }` (conversational answer or plan-first response) **or** `{ proposal }` (only when the user issues an explicit execute trigger like *"execute this plan"*, *"go ahead"*, *"do it"*, or *"approve"*).
 - `POST /approve` — `{ proposalId }` → `{ proof }` or `{ rejected: verdict }` or `502 exec_failed`
 - `GET /proof/:id` — full Proof object scoped to session.user
 - `GET /portfolio` — on-chain balances of session.user across session.allowedTokens
@@ -157,10 +157,15 @@ Pre-demo smoke run (manual, requires Sepolia funds + funded KH Turnkey wallet):
 - `KEEPERHUB_NETWORK` defaults to `sepolia`; verified against `GET https://app.keeperhub.com/api/chains`. The chainId is the source of truth, so a future slug rename is a single env-var change.
 - The KeeperHub API key never leaves memory and is never serialized into `Proof`.
 
+## Twin: plan-first chat flow
+
+`@agentvault/twin` does not jump straight to a proposal. The conversation is two-turn by design:
+
+1. **Plan turn** — user describes intent (*"rebalance ~$50 USDC into ETH"*). The twin returns a natural-language plan as `{ reply }`. No `TradeProposal` is created yet. The exchange is appended to convo memory in 0G KV.
+2. **Execute turn** — user issues an explicit trigger word: *"execute this plan"*, *"do it"*, *"go ahead"*, *"swap now"*, *"trade now"*, or *"approve"*. The twin re-extracts the trade spec from the prior plan turn (so amounts and decimals come from the original message, not a re-guess), produces a signed `VerifiableInference`, and returns `{ proposal }`.
+
+This avoids two failure modes: (a) the LLM hallucinating an `amountIn` with wrong decimals on ambiguous follow-ups, and (b) silent execution of a plan the user never confirmed. The intent classifier uses a local regex fast-path first (matching trigger words and token symbols) and only calls the LLM intent prompt for genuinely ambiguous messages.
+
 ## Phase 1 done criteria
 
-User chats → proposes trade → approves → swap executes (direct or via KeeperHub) → Proof Explorer shows full chain (signed inference + verdict + rules + tx hash + anchor tx + optional KeeperHub audit step). All ticks independently verifiable.
-
-## Demo video script
-
-The 4-minute hackathon demo script lives at [`../VIDEO_SCRIPT.md`](../VIDEO_SCRIPT.md). It includes a pre-flight checklist (KH wallet funding, browser zoom, dashboards open), per-segment timing, the lines worth memorizing verbatim, and shorter (3-min) / longer (5-min) cuts that re-use the same shots.
+User chats → twin proposes a plan → user confirms → twin returns a signed proposal → user approves → swap executes (direct or via KeeperHub) → Proof Explorer shows full chain (signed inference + verdict + rules + tx hash + anchor tx + optional KeeperHub audit step). All ticks independently verifiable.
