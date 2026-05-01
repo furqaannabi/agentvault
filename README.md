@@ -1,4 +1,12 @@
-**AI portfolio manager with cryptographic receipts. Every trade signed, logged, auditable—trust math, not promises**
+# Agent Vault - The Cryptographically Verifiable AI Agent 
+
+<img width="1377" height="1366" alt="image" src="https://github.com/user-attachments/assets/64323951-cb2b-4872-9943-880349380f0f" />
+
+<br></br>
+
+**AI portfolio manager with cryptographic receipts. Every trade signed, logged, auditable trust math, not promises**
+<br></br>
+
 
 <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/94905d5e-6988-4e2c-bafa-9dd9629bec99" />
 
