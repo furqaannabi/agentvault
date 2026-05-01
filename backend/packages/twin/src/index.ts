@@ -108,8 +108,24 @@ export function createTwin(deps: TwinDeps): Twin {
       }
 
       // Step 2b: plan-first trade flow
-      const extracted = extractTrade(msg, tokens);
+      let extracted = extractTrade(msg, tokens);
       if (extracted) console.log(`[twin] extracted: ${extracted.amountIn} ${extracted.symbolIn} → ${extracted.symbolOut}`);
+
+      // If user says "execute this plan" but the current message has no amount/token,
+      // scan recent conversation history to re-extract the original trade intent.
+      // This prevents the LLM from guessing amountIn with wrong decimals.
+      if (!extracted && wantsImmediateExecution && convo?.turns?.length) {
+        for (let i = convo.turns.length - 1; i >= 0 && !extracted; i--) {
+          const turn = convo.turns[i];
+          if (turn && turn.role === 'user') {
+            extracted = extractTrade(turn.content, tokens);
+            if (extracted) {
+              console.log(`[twin] re-extracted from convo turn ${i}: ${extracted.amountIn} ${extracted.symbolIn} → ${extracted.symbolOut}`);
+            }
+          }
+        }
+      }
+
       if (!wantsImmediateExecution) {
         const planPrompt = [
           'PORTFOLIO:',
