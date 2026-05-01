@@ -160,3 +160,7 @@ Pre-demo smoke run (manual, requires Sepolia funds + funded KH Turnkey wallet):
 ## Phase 1 done criteria
 
 User chats → proposes trade → approves → swap executes (direct or via KeeperHub) → Proof Explorer shows full chain (signed inference + verdict + rules + tx hash + anchor tx + optional KeeperHub audit step). All ticks independently verifiable.
+
+## Demo video script
+
+The 4-minute hackathon demo script lives at [`../VIDEO_SCRIPT.md`](../VIDEO_SCRIPT.md). It includes a pre-flight checklist (KH wallet funding, browser zoom, dashboards open), per-segment timing, the lines worth memorizing verbatim, and shorter (3-min) / longer (5-min) cuts that re-use the same shots.

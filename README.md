@@ -229,7 +229,7 @@ Per the hackathon's qualification requirements across the four tracks:
 - [x] **`FEEDBACK.md` in repo root** (Uniswap requirement) — [`FEEDBACK.md`](./FEEDBACK.md)
 - [x] **Brief write-up of approach + KH integration** (KeeperHub requirement) — see [Tracks targeted](#-tracks-targeted) and [Execution: KeeperHub](#execution-modes) sections
 - [x] **Working examples + clear documentation** — package-level READMEs in `backend/packages/exec/` and `backend/packages/uniswap-api/`
-- [ ] **Demo video (≤ 3 min)** — see [Demo](#demo) below
+- [ ] **Demo video (≤ 3 min)** — script ready in [`VIDEO_SCRIPT.md`](./VIDEO_SCRIPT.md); upload pending — see [Demo](#demo) below
 - [ ] **Live demo link** — see [Demo](#demo) below
 - [x] **Contract deployment addresses** — see [Deployments](#deployments) below
 - [ ] **Team member names + contact** (Telegram & X) — see [Team](#team) below
@@ -238,6 +238,7 @@ Per the hackathon's qualification requirements across the four tracks:
 
 - **Live demo:** _TBD — replace with deployed URL before submission._
 - **Demo video (≤ 3 min):** _TBD — replace with YouTube/Loom URL before submission._
+- **Video script:** [`VIDEO_SCRIPT.md`](./VIDEO_SCRIPT.md) — full 4-minute narration with timing marks, pre-flight checklist, OBS layout, 3-min and 5-min cuts.
 - **Demo flow:**
   1. Connect wallet (Sepolia), approve USDC allowance to delegate, sign `AgentSession`.
   2. Chat: *"rebalance ~$50 of USDC into ETH with at most 0.5% slippage"*.
