@@ -335,7 +335,7 @@ export function ProofExplorer({ proofId }: ProofExplorerProps) {
 
   // ── Populated ──────────────────────────────────────────────────────────────
   return (
-    <div style={{ padding: 'var(--space-8) var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)', maxWidth: 860 }}>
+    <div style={{ padding: 'var(--space-8) var(--space-6)', display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
       {/* Page heading */}
       <div>
         <Heading size="2xl">

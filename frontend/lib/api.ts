@@ -1,7 +1,7 @@
 import type { Config, Proof, Portfolio, TradeProposal } from './types'
 import { useSessionStore } from './store/sessionStore'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
 // ── Error types ───────────────────────────────────────────────────────────────
 
